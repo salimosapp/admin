@@ -1,0 +1,21 @@
+<h1>Fuentes</h1>
+<table>
+    <thead>
+        <tr>
+            <th>Nombre</th>
+            <th>Tipo</th>
+            <th>URL</th>
+            <th>Activa</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for fuente in fuentes %}
+        <tr>
+            <td>{{ fuente.nombre }}</td>
+            <td>{{ fuente.tipo }}</td>
+            <td><a href="{{ fuente.url }}" target="_blank">{{ fuente.url }}</a></td>
+            <td>{{ "Sí" if fuente.activa else "No" }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

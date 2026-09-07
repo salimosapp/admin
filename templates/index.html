@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin</title>
+    <script src="https://unpkg.com/htmx.org"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: sans-serif; }
+        nav { background: #333; padding: 1rem; }
+        nav a { color: #fff; text-decoration: none; margin-right: 1rem; }
+        nav a:hover { text-decoration: underline; }
+        main { padding: 2rem; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="/" hx-get="/inicio" hx-target="#contenido" hx-push-url="true">Inicio</a>
+        <a href="/eventos" hx-get="/eventos" hx-target="#contenido" hx-push-url="true">Eventos</a>
+        <a href="/fuentes" hx-get="/fuentes" hx-target="#contenido" hx-push-url="true">Fuentes</a>
+        <a href="/scraping" hx-get="/scraping" hx-target="#contenido" hx-push-url="true">Scraping</a>
+    </nav>
+    <main id="contenido" hx-get="/eventos" hx-trigger="load">
+    </main>
+</body>
+</html>
