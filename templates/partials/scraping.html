@@ -1,4 +1,26 @@
 <h1>Scraping</h1>
-<button hx-post="/scraping/iniciar" hx-target="#scraping-contenido" hx-swap="innerHTML">Iniciar scraping</button>
-<div id="scraping-contenido">
+<p class="bienvenida">Recorre las fuentes activas, detecta eventos con la IA y los guarda en la base.
+Puede tardar unos minutos.</p>
+
+<div class="accion-grupo">
+    {# boton-grande: inicia el scraping con POST.
+       Mientras corre, el botón se deshabilita y muestra un spinner.
+       hx-indicator: muestra el div .progreso durante la petición. #}
+    <button id="btn-scraping" class="boton-grande"
+            hx-post="/scraping/iniciar"
+            hx-target="#scraping-contenido"
+            hx-swap="innerHTML"
+            hx-indicator="#scraping-progreso"
+            hx-on::before-request="document.getElementById('btn-scraping').disabled = true; document.getElementById('btn-scraping').textContent = 'Escrapeando...';"
+            hx-on::after-request="document.getElementById('btn-scraping').disabled = false; document.getElementById('btn-scraping').textContent = 'Volver a escrapear';">
+        Iniciar scraping
+    </button>
+
+    <div id="scraping-progreso" class="progreso htmx-indicator">
+        <span class="spinner"></span>
+        Procesando las fuentes... esto puede tardar unos minutos.
+    </div>
+</div>
+
+<div id="scraping-contenido" style="margin-top: 1.5rem;">
 </div>

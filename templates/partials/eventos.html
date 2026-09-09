@@ -1,6 +1,49 @@
 <h1>Eventos</h1>
-<ul>
-    {% for evento in eventos %}
-        <li>{{ evento }}</li>
-    {% endfor %}
-</ul>
+<p class="bienvenida">Visualización de todos los eventos cargados. Para aprobar, modificar o eliminar, usá la pestaña Inicio.</p>
+
+{# Si no hay eventos, avisamos. Jinja2: las llaves dobles imprimen variables. #}
+{% if eventos %}
+<table>
+    <thead>
+        <tr>
+            <th>Imagen</th>
+            <th>Título</th>
+            <th>Fecha</th>
+            <th>Lugar</th>
+            <th>Categoría</th>
+            <th>Precio</th>
+            <th>Aprobado</th>
+        </tr>
+    </thead>
+    <tbody>
+        {# For: recorremos la lista de eventos que llega desde la ruta /eventos #}
+        {% for evento in eventos %}
+        <tr>
+            <td>
+                {# Si tiene imagen descargada (ruta local), la mostramos; si no, nada. #}
+                {% if evento.imagen_url %}
+                <img src="/static/{{ evento.imagen_url }}" alt="{{ evento.titulo }}" width="120">
+                {% else %}
+                <em>sin imagen</em>
+                {% endif %}
+            </td>
+            <td>
+                <a href="{{ evento.link_fuente }}" target="_blank">{{ evento.titulo }}</a>
+            </td>
+            <td>{{ evento.fecha_hora }}</td>
+            <td>{{ evento.lugar or "—" }}</td>
+            <td>{{ evento.categoria or "—" }}</td>
+            <td>{{ evento.precio or "—" }}</td>
+            <td>
+                <span class="badge {{ 'ok' if evento.aprobado else 'no' }}">
+                    {{ "Aprobado" if evento.aprobado else "Pendiente" }}
+                </span>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% else %}
+<p>Todavía no hay eventos. Pasá por la pestaña "Scraping" para buscarlos.</p>
+{% endif %}

@@ -1,1 +1,8 @@
-<p>Scraping completado. {{ total }} eventos nuevos/actualizados.</p>
+<div class="resultado-scraping">
+    <h3>Scraping completado</h3>
+    <p>
+        <strong>{{ resultado.total }}</strong> eventos procesados
+        ({{ resultado.nuevos }} nuevos, {{ resultado.actualizados }} actualizados).
+    </p>
+    <a class="enlace" href="/inicio">Ir al Inicio para revisarlos</a>
+</div>

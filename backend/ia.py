@@ -7,9 +7,12 @@ cuáles describen eventos culturales concretos y próximos.
 
 import json
 
+import requests
+from bs4 import BeautifulSoup
+
 from google import genai
 
-from backend.config import AI_API_KEY, AI_MODEL
+from backend.config import AI_API_KEY, AI_MODEL, SCRAPING_USER_AGENT
 
 # Constantes
 MAX_TEXTO_LARGO = 2000  # caracteres máxima por texto enviado a la IA
@@ -120,3 +123,100 @@ def extraer_eventos(items: list[dict], fecha_hoy: str) -> list[dict | None]:
     except Exception as e:
         print(f"Error consultando la IA: {e}")
         return [None] * len(items)
+
+
+PROMPT_SELECTORES = """Sos un experto en HTML y CSS. Te doy el HTML del comienzo de la página {url} de un sitio de {tipo_label} de Berisso, Argentina.
+
+Necesito que me digas los selectores CSS para extraer datos de este sitio:
+- "selector_link": los links a cada noticia/artículo. SOLO si el sitio es un listado de noticias.
+- "selector_item": las tarjetas/cajas de cada evento. SOLO si el sitio es una cartelera de eventos.
+- "selector_imagen": la imagen dentro de cada noticia/tarjeta (opcional).
+- "lugar_fijo": el nombre del lugar/teatro/cine si TODO el sitio pertenece a un solo lugar fijo (ej: un teatro). Si el sitio lista eventos de varios lugares distintos, poné null.
+
+Respondé EXACTAMENTE con un JSON así, sin texto extra:
+{{
+  "selector_link": "css o null",
+  "selector_item": "css o null",
+  "selector_imagen": "css o null",
+  "lugar_fijo": "texto o null"
+}}
+
+Reglas:
+- Usá las clases reales que ves en el HTML, no inventes.
+- Preferí un selector corto y representativo (ej: a.titulo3, article.obra-card).
+- Si el selector principal no se corresponde con el tipo de sitio, poné null en la clave que no corresponde.
+
+HTML:
+{html}
+"""
+
+
+def _selectores_vacios() -> dict:
+    """Devuelve un dict con todos los selectores sin detectar (None)."""
+    return {
+        "selector_link": None,
+        "selector_item": None,
+        "selector_imagen": None,
+        "lugar_fijo": None,
+    }
+
+
+def detectar_selectores(url: str, tipo: str) -> dict:
+    """
+    Analiza la página de una fuente con la IA y detecta los selectores CSS.
+
+    La IA decide:
+    - selector_link: links a artículos (fuentes tipo 'listado_noticias').
+    - selector_item: tarjetas de eventos (fuentes tipo 'cartelera').
+    - selector_imagen: imagen dentro de cada tarjeta (opcional).
+    - lugar_fijo: nombre del lugar si el sitio es de un solo lugar (solo cartelera).
+
+    Nunca lanza excepción: si la descarga o la IA fallan, devuelve todos
+    los selectores como None (es la señal de "no se pudo detectar").
+    """
+    # 1) Descargar la página de la fuente.
+    try:
+        respuesta = requests.get(url, headers={"User-Agent": SCRAPING_USER_AGENT}, timeout=15)
+        respuesta.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        print(f"Error descargando {url} para detectar selectores: {e}")
+        return _selectores_vacios()
+
+    # Recortamos el HTML: no hace falta mandárselo todo a la IA.
+    soup = BeautifulSoup(respuesta.text, "html.parser")
+    html_recortado = str(soup)[:30000]
+
+    etiqueta = "listado de noticias" if tipo == "listado_noticias" else "cartelera"
+    prompt = PROMPT_SELECTORES.format(url=url, tipo_label=etiqueta, html=html_recortado)
+
+    # 2) Preguntarle a la IA.
+    try:
+        respuesta = _cliente.models.generate_content(model=AI_MODEL, contents=prompt)
+        texto_respuesta = (
+            respuesta.text.strip()
+            .removeprefix("```json")
+            .removeprefix("```")
+            .removesuffix("```")
+            .strip()
+        )
+        datos = json.loads(texto_respuesta)
+        if not isinstance(datos, dict):
+            print(f"La IA no devolvió un JSON de selectores: {texto_respuesta[:MAX_LOG_LARGO]}")
+            return _selectores_vacios()
+    except (json.JSONDecodeError, AttributeError):
+        print(f"La IA no devolvió un JSON de selectores válido")
+        return _selectores_vacios()
+    except Exception as e:
+        print(f"Error consultando la IA para detectar selectores: {e}")
+        return _selectores_vacios()
+
+    # 3) Normalizar: solo textos no vacíos (o None).
+    claves = ["selector_link", "selector_item", "selector_imagen", "lugar_fijo"]
+    resultado = {}
+    for clave in claves:
+        valor = datos.get(clave)
+        if isinstance(valor, str) and valor.strip() and valor.strip().lower() != "null":
+            resultado[clave] = valor.strip()
+        else:
+            resultado[clave] = None
+    return resultado

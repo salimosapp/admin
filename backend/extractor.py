@@ -168,13 +168,18 @@ def _parsear_fecha_hora(datos: dict) -> datetime | None:
         return None
 
 
-def guardar_evento(datos: dict, item: dict) -> None:
+def guardar_evento(datos: dict, item: dict) -> str | None:
     """
-    Guarda un evento en la base de datos.
+    Guarda un evento en la base de datos y devuelve el resultado.
 
     Usa INSERT ... ON CONFLICT para hacer upsert:
     si ya existe un evento con el mismo título, fecha y lugar,
     actualiza precio e imagen.
+
+    Returns:
+        "nuevo" si se insertó por primera vez,
+        "actualizado" si solo se actualizó uno que ya existía,
+        None si hubo un error guardando.
     """
     fecha_hora = _parsear_fecha_hora(datos)
 
@@ -202,6 +207,7 @@ def guardar_evento(datos: dict, item: dict) -> None:
                 precio = EXCLUDED.precio,
                 imagen_url = COALESCE(EXCLUDED.imagen_url, eventos.imagen_url),
                 actualizado_en = NOW()
+            RETURNING (xmax = 0) AS insertado
         """, (
             datos["titulo"],
             fecha_hora,
@@ -213,13 +219,20 @@ def guardar_evento(datos: dict, item: dict) -> None:
             imagen_local,
         ))
 
+        # xmax = 0 significa que la fila se insertó (no se actualizó).
+        fila = cursor.fetchone()
+        insertado = bool(fila and fila[0])
+
         conexion.commit()
         cursor.close()
+
+        return "nuevo" if insertado else "actualizado"
 
     except Exception as e:
         print(f"  Error guardando evento '{datos.get('titulo')}': {e}")
         if conexion:
             conexion.rollback()
+        return None
     finally:
         if conexion:
             conexion.close()
@@ -228,7 +241,7 @@ def guardar_evento(datos: dict, item: dict) -> None:
 # --- Orquestación ---
 
 
-def ejecutar() -> int:
+def ejecutar() -> dict:
     """
     Ejecuta el scraping completo de todas las fuentes.
 
@@ -239,12 +252,27 @@ def ejecutar() -> int:
     4. Los eventos encontrados se guardan en la base de datos.
 
     Returns:
-        Cantidad total de eventos nuevos/actualizados.
+        dict con "nuevos" (insertados por primera vez),
+        "actualizados" (ya existían, se actualizaron) y "total".
     """
     fecha_hoy = date.today().isoformat()
-    total_encontrados = 0
+    nuevos = 0
+    actualizados = 0
 
     for fuente in obtener_fuentes():
+        # Si la fuente no tiene el selector obligatorio para su tipo
+        # (porque la IA no pudo detectarlo y quedó mal configurada),
+        # la salteamos con un aviso en vez de romper el lote.
+        selector_obligatorio = (
+            "selector_item" if fuente["tipo"] == "cartelera" else "selector_link"
+        )
+        if not fuente.get(selector_obligatorio):
+            print(
+                f"  La fuente {fuente['url']} no tiene {selector_obligatorio}; "
+                f"se saltea. Revisala en /fuentes."
+            )
+            continue
+
         print(f"\nRevisando fuente ({fuente['tipo']}): {fuente['url']}")
         try:
             items = _procesar_fuente(fuente)
@@ -263,12 +291,15 @@ def ejecutar() -> int:
 
             for item, resultado in zip(lote, resultados):
                 if resultado:
+                    estado = guardar_evento(resultado, item)
+                    if estado == "nuevo":
+                        nuevos += 1
+                    elif estado == "actualizado":
+                        actualizados += 1
                     print(
                         f"    ✓ Evento: {resultado['titulo']} "
-                        f"({resultado['fecha']})"
+                        f"({resultado['fecha']}) [{estado}]"
                     )
-                    guardar_evento(resultado, item)
-                    total_encontrados += 1
                 else:
                     print("    · No es evento (o no se pudo interpretar)")
 
@@ -276,8 +307,13 @@ def ejecutar() -> int:
             if i + SCRAPING_LOTE_TAMANO < len(items):
                 time.sleep(SCRAPING_ENTRE_LOTES_PAUSA)
 
-    print(f"\nTotal eventos nuevos/actualizados: {total_encontrados}")
-    return total_encontrados
+    total = nuevos + actualizados
+    print(f"\nTotal: {total} eventos ({nuevos} nuevos, {actualizados} actualizados)")
+    return {
+        "total": total,
+        "nuevos": nuevos,
+        "actualizados": actualizados,
+    }
 
 
 def _procesar_fuente(fuente: dict) -> list[dict]:

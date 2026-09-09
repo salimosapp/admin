@@ -1,4 +1,42 @@
 <h1>Fuentes</h1>
+
+{# Formulario para crear una fuente nueva.
+   Solo pedimos los datos básicos: la IA detecta los selectores sola.
+   hx-post: envía el formulario con POST sin recargar la página.
+   hx-target/hx-swap: la respuesta (la tabla ya actualizada) reemplaza al main. #}
+<h2>Nueva fuente</h2>
+<form hx-post="/fuentes/nueva" hx-target="#contenido" hx-swap="innerHTML">
+    <div>
+        <label>Nombre *</label>
+        <input type="text" name="nombre" required placeholder="Ej: Berisso Ciudad - Cultura">
+    </div>
+    <div>
+        <label>Tipo *</label>
+        <select name="tipo" required>
+            <option value="listado_noticias">Listado de noticias</option>
+            <option value="cartelera">Cartelera</option>
+        </select>
+    </div>
+    <div>
+        <label>URL *</label>
+        <input type="text" name="url" required placeholder="https://...">
+    </div>
+    <p class="pista">La IA visita el sitio y detecta automáticamente los selectores de links,
+        items, imagen y el lugar fijo.</p>
+    <button type="submit">Guardar fuente</button>
+</form>
+
+{# Mensajes de resultado (éxito o error del servidor). #}
+{% if mensaje %}
+<p class="ok">{{ mensaje }}</p>
+{% endif %}
+{% if error %}
+<p class="error">{{ error }}</p>
+{% endif %}
+
+<h2>Listado</h2>
+
+{% if fuentes %}
 <table>
     <thead>
         <tr>
@@ -6,16 +44,39 @@
             <th>Tipo</th>
             <th>URL</th>
             <th>Activa</th>
+            <th>Acción</th>
         </tr>
     </thead>
     <tbody>
         {% for fuente in fuentes %}
         <tr>
             <td>{{ fuente.nombre }}</td>
-            <td>{{ fuente.tipo }}</td>
-            <td><a href="{{ fuente.url }}" target="_blank">{{ fuente.url }}</a></td>
+            <td>{{ "Listado de noticias" if fuente.tipo == "listado_noticias" else "Cartelera" }}</td>
+            <td>
+                <a href="{{ fuente.url }}" target="_blank">{{ fuente.url }}</a>
+                {# Mostramos el selector detectado en chiquito, para poder auditarlo. #}
+                {% set selector = fuente.selector_link or fuente.selector_item %}
+                {% if selector %}
+                <span class="pista">selector: {{ selector }}</span>
+                {% endif %}
+            </td>
             <td>{{ "Sí" if fuente.activa else "No" }}</td>
+            <td>
+                {# Botón que activa/desactiva la fuente.
+                   hx-post: llama a la ruta /fuentes/<id>/estado.
+                   La respuesta (tabla actualizada) reemplaza el main. #}
+                <button
+                    class="{{ 'peligro' if fuente.activa else '' }}"
+                    hx-post="/fuentes/{{ fuente.id }}/estado"
+                    hx-target="#contenido"
+                    hx-swap="innerHTML">
+                    {{ "Desactivar" if fuente.activa else "Activar" }}
+                </button>
+            </td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
+{% else %}
+<p>No hay fuentes. Agregá la primera con el formulario de arriba.</p>
+{% endif %}

@@ -1,2 +1,52 @@
-<h1>Inicio</h1>
-<p>Bienvenido al panel de administración.</p>
+<h1>Inicio · Gestión de eventos</h1>
+<p class="bienvenida">Aprobá, modificá o eliminá eventos. Marcá varios con los checkboxes y usá la barra para aprobar/eliminar en lote.</p>
+
+{# Mensaje opcional que mandan las acciones en lote (ej: "Se aprobaron 2 eventos"). #}
+{% if mensaje %}
+<p class="mensaje">{{ mensaje }}</p>
+{% endif %}
+
+{# Barra de acciones en lote.
+   hx-vals='js:...'  -> htmx ejecuta esa función JS y envía su resultado (ids)
+   como parámetro POST. Así mandamos los checkboxes marcados. #}
+<div class="barra-batch">
+    <label>
+        <input type="checkbox" onclick="seleccionarTodos(this)"> Seleccionar todos
+    </label>
+    <button hx-post="/eventos/aprobar-batch"
+            hx-vals='js:{"ids": idsSeleccionados()}'
+            hx-target="#contenido"
+            hx-swap="innerHTML">
+        Aprobar seleccionados
+    </button>
+    <button class="peligro"
+            hx-post="/eventos/eliminar-batch"
+            hx-vals='js:{"ids": idsSeleccionados()}'
+            hx-target="#contenido"
+            hx-swap="innerHTML"
+            hx-confirm="¿Eliminar los eventos seleccionados?">
+        Eliminar seleccionados
+    </button>
+</div>
+
+{# Funciones JS que usa htmx (se recargan junto con esta vista). #}
+<script>
+    function seleccionarTodos(checkbox) {
+        document.querySelectorAll('.evento-check').forEach(c => c.checked = checkbox.checked);
+    }
+    function idsSeleccionados() {
+        var ids = Array.from(document.querySelectorAll('.evento-check:checked'))
+                        .map(function (c) { return c.value; });
+        return JSON.stringify(ids);
+    }
+</script>
+
+{# Grilla de tarjetas. Cada tarjeta es un parcial aparte (evento_card.html),
+   así las acciones pueden reemplazar UNA tarjeta sin tocar el resto. #}
+<div class="grilla">
+    {% for evento in eventos %}
+    {% include "partials/evento_card.html" %}
+    {% else %}
+    <p>No hay eventos cargados. Pasá por "Scraping" para buscarlos.</p>
+    {% endfor %}
+</div>
