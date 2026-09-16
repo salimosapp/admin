@@ -19,6 +19,7 @@ from backend.config import (
 from backend.db import conectar
 from backend.fuentes import obtener_fuentes
 from backend.ia import extraer_eventos
+from backend.scrapings import registrar_scraping
 from backend.utilidades import descargar_imagen
 
 HEADERS = {"User-Agent": SCRAPING_USER_AGENT}
@@ -184,9 +185,10 @@ def guardar_evento(datos: dict, item: dict) -> str | None:
     fecha_hora = _parsear_fecha_hora(datos)
 
     # Descargar imagen si hay URL
-    imagen_local = None
+    imagen_bytes = None
+    imagen_mime = None
     if item.get("imagen_url"):
-        imagen_local = descargar_imagen(
+        imagen_bytes, imagen_mime = descargar_imagen(
             item["imagen_url"],
             datos["titulo"],
             base_url=item.get("imagen_base", ""),
@@ -200,12 +202,15 @@ def guardar_evento(datos: dict, item: dict) -> str | None:
         cursor.execute("""
             INSERT INTO eventos
                 (titulo, fecha_hora, lugar, categoria, precio,
-                 link_fuente, descripcion, imagen_url, aprobado)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, false)
+                 link_fuente, descripcion, imagen_url, imagen_datos, imagen_mime,
+                 aprobado)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, false)
             ON CONFLICT (titulo, fecha_hora, lugar)
             DO UPDATE SET
                 precio = EXCLUDED.precio,
                 imagen_url = COALESCE(EXCLUDED.imagen_url, eventos.imagen_url),
+                imagen_datos = COALESCE(EXCLUDED.imagen_datos, eventos.imagen_datos),
+                imagen_mime = COALESCE(EXCLUDED.imagen_mime, eventos.imagen_mime),
                 actualizado_en = NOW()
             RETURNING (xmax = 0) AS insertado
         """, (
@@ -216,7 +221,9 @@ def guardar_evento(datos: dict, item: dict) -> str | None:
             datos.get("precio"),
             item["link"],
             datos.get("descripcion_corta"),
-            imagen_local,
+            item.get("imagen_url"),
+            imagen_bytes,
+            imagen_mime,
         ))
 
         # xmax = 0 significa que la fila se insertó (no se actualizó).
@@ -241,25 +248,35 @@ def guardar_evento(datos: dict, item: dict) -> str | None:
 # --- Orquestación ---
 
 
-def ejecutar() -> dict:
+def ejecutar(fuente_id: int | None = None) -> dict:
     """
-    Ejecuta el scraping completo de todas las fuentes.
+    Ejecuta el scraping de todas las fuentes activas (o de una sola).
 
     Flujo:
     1. Para cada fuente, descarga y parsea el HTML.
     2. Agrupa los items en lotes de SCRAPING_LOTE_TAMANO.
     3. Cada lote se envía a la IA para identificar eventos.
     4. Los eventos encontrados se guardan en la base de datos.
+    5. Registra la corrida en el historial (tabla scrapings).
+
+    Args:
+        fuente_id: si se pasa, solo escrapea esa fuente (debe estar activa).
 
     Returns:
-        dict con "nuevos" (insertados por primera vez),
-        "actualizados" (ya existían, se actualizaron) y "total".
+        dict con "nuevos", "actualizados", "errores", "total", "duracion"
+        (y "fuente_id" para saber a qué corrida corresponde).
     """
     fecha_hoy = date.today().isoformat()
+    inicio = time.time()
     nuevos = 0
     actualizados = 0
+    errores = 0
 
-    for fuente in obtener_fuentes():
+    fuentes = obtener_fuentes()
+    if fuente_id is not None:
+        fuentes = [f for f in fuentes if f["id"] == fuente_id]
+
+    for fuente in fuentes:
         # Si la fuente no tiene el selector obligatorio para su tipo
         # (porque la IA no pudo detectarlo y quedó mal configurada),
         # la salteamos con un aviso en vez de romper el lote.
@@ -278,6 +295,7 @@ def ejecutar() -> dict:
             items = _procesar_fuente(fuente)
         except Exception as e:
             print(f"Error accediendo a {fuente['url']}: {e}")
+            errores += 1
             continue
 
         print(f"  {len(items)} items encontrados")
@@ -296,8 +314,10 @@ def ejecutar() -> dict:
                         nuevos += 1
                     elif estado == "actualizado":
                         actualizados += 1
+                    else:
+                        errores += 1
                     print(
-                        f"    ✓ Evento: {resultado['titulo']} "
+                        f"    > Evento: {resultado['titulo']} "
                         f"({resultado['fecha']}) [{estado}]"
                     )
                 else:
@@ -307,12 +327,31 @@ def ejecutar() -> dict:
             if i + SCRAPING_LOTE_TAMANO < len(items):
                 time.sleep(SCRAPING_ENTRE_LOTES_PAUSA)
 
+    duracion = time.time() - inicio
+
+    # Guardamos la corrida en el historial para poder auditarla.
+    registrar_scraping(
+        fuente_id=fuente_id,
+        total=nuevos + actualizados,
+        nuevos=nuevos,
+        actualizados=actualizados,
+        errores=errores,
+        duracion_seg=round(duracion, 1),
+    )
+
     total = nuevos + actualizados
-    print(f"\nTotal: {total} eventos ({nuevos} nuevos, {actualizados} actualizados)")
+    print(
+        f"\nTotal: {total} eventos "
+        f"({nuevos} nuevos, {actualizados} actualizados, {errores} errores) "
+        f"en {duracion:.1f}s"
+    )
     return {
         "total": total,
         "nuevos": nuevos,
         "actualizados": actualizados,
+        "errores": errores,
+        "duracion": round(duracion, 1),
+        "fuente_id": fuente_id,
     }
 
 

@@ -41,9 +41,27 @@ CREATE TABLE IF NOT EXISTS eventos (
     link_fuente TEXT,
     descripcion TEXT,
     imagen_url TEXT,
+    imagen_datos BYTEA,
+    imagen_mime TEXT,
     aprobado BOOLEAN NOT NULL DEFAULT false,
     actualizado_en TIMESTAMP NOT NULL DEFAULT NOW(),
     UNIQUE (titulo, fecha_hora, lugar)
+);
+
+-- Migración: si la tabla ya existía sin las columnas de imagen en BD,
+-- las agregamos (IF NOT EXISTS para poder correr esto varias veces).
+ALTER TABLE eventos ADD COLUMN IF NOT EXISTS imagen_datos BYTEA;
+ALTER TABLE eventos ADD COLUMN IF NOT EXISTS imagen_mime TEXT;
+
+CREATE TABLE IF NOT EXISTS scrapings (
+    id SERIAL PRIMARY KEY,
+    fecha TIMESTAMP NOT NULL DEFAULT NOW(),
+    fuente_id INTEGER REFERENCES fuentes(id) ON DELETE SET NULL,
+    total INTEGER NOT NULL DEFAULT 0,
+    nuevos INTEGER NOT NULL DEFAULT 0,
+    actualizados INTEGER NOT NULL DEFAULT 0,
+    errores INTEGER NOT NULL DEFAULT 0,
+    duracion_seg REAL
 );
 """
 

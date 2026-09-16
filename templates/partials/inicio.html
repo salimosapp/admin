@@ -1,6 +1,10 @@
 <h1>Inicio · Gestión de eventos</h1>
 <p class="bienvenida">Aprobá, modificá o eliminá eventos. Marcá varios con los checkboxes y usá la barra para aprobar/eliminar en lote.</p>
 
+{# Filtros por estado y búsqueda (el filtro de la página actual se mantiene). #}
+{% set url = '/inicio' %}
+{% include "partials/filtros.html" %}
+
 {# Mensaje opcional que mandan las acciones en lote (ej: "Se aprobaron 2 eventos"). #}
 {% if mensaje %}
 <p class="mensaje">{{ mensaje }}</p>
@@ -8,15 +12,19 @@
 
 {# Barra de acciones en lote.
    hx-vals='js:...'  -> htmx ejecuta esa función JS y envía su resultado (ids)
-   como parámetro POST. Así mandamos los checkboxes marcados. #}
+   como parámetro POST. Así mandamos los checkboxes marcados.
+   Los inputs hidden + hx-include hacen que se conserven los filtros vigentes. #}
 <div class="barra-batch">
+    <input type="hidden" name="estado" value="{{ estado or '' }}">
+    <input type="hidden" name="q" value="{{ q or '' }}">
     <label>
         <input type="checkbox" onclick="seleccionarTodos(this)"> Seleccionar todos
     </label>
     <button hx-post="/eventos/aprobar-batch"
             hx-vals='js:{"ids": idsSeleccionados()}'
             hx-target="#contenido"
-            hx-swap="innerHTML">
+            hx-swap="innerHTML"
+            hx-include="closest .barra-batch">
         Aprobar seleccionados
     </button>
     <button class="peligro"
@@ -24,6 +32,7 @@
             hx-vals='js:{"ids": idsSeleccionados()}'
             hx-target="#contenido"
             hx-swap="innerHTML"
+            hx-include="closest .barra-batch"
             hx-confirm="¿Eliminar los eventos seleccionados?">
         Eliminar seleccionados
     </button>
@@ -47,6 +56,14 @@
     {% for evento in eventos %}
     {% include "partials/evento_card.html" %}
     {% else %}
+    {% if q or estado %}
+    <p>No hay eventos que coincidan con los filtros.</p>
+    {% else %}
     <p>No hay eventos cargados. Pasá por "Scraping" para buscarlos.</p>
+    {% endif %}
     {% endfor %}
 </div>
+
+<script>
+    marcarActiva('inicio');
+</script>

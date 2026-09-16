@@ -2,38 +2,35 @@
 Utilidades compartidas del proyecto.
 """
 
-import os
-import hashlib
-from pathlib import Path
+import mimetypes
+from urllib.parse import urlparse
 
 import requests
 
-from backend.config import SCRAPING_USER_AGENT, IMAGENES_DIR, IMAGEN_TIMEOUT
+from backend.config import SCRAPING_USER_AGENT, IMAGEN_TIMEOUT
 
 
 HEADERS = {"User-Agent": SCRAPING_USER_AGENT}
 
 
-def _asegurar_directorio_imagenes():
-    """Crea el directorio de imágenes si no existe."""
-    Path(IMAGENES_DIR).mkdir(parents=True, exist_ok=True)
-
-
-def descargar_imagen(url_imagen: str, titulo: str, base_url: str = "") -> str | None:
+def descargar_imagen(url_imagen: str, titulo: str, base_url: str = "") -> tuple[bytes | None, str | None]:
     """
-    Descarga una imagen desde una URL y la guarda con nombre hasheado.
+    Descarga una imagen y devuelve (bytes, mime_type).
+
+    Las imágenes se guardan en la base de datos (columna imagen_datos de
+    eventos), así ambas apps (admin y web) las leen desde ahí sin depender
+    de archivos en disco.
 
     Args:
         url_imagen: URL de la imagen a descargar.
-        titulo: Título del evento (no se usa para el nombre, pero se mantiene por compatibilidad).
+        titulo: Título del evento (se mantiene por compatibilidad).
         base_url: URL base para resolver URLs relativas.
 
     Returns:
-        Ruta relativa de la imagen guardada (ej: "img/eventos/abc123.jpg"),
-        o None si falla.
+        Tupla (bytes, mime). Si falla la descarga o no es imagen: (None, None).
     """
     if not url_imagen:
-        return None
+        return None, None
 
     try:
         # Resolver URLs relativas
@@ -50,24 +47,15 @@ def descargar_imagen(url_imagen: str, titulo: str, base_url: str = "") -> str | 
         content_type = respuesta.headers.get("Content-Type", "")
         if "image" not in content_type:
             print(f"URL no es imagen ({content_type}): {url_imagen}")
-            return None
+            return None, None
 
-        # Generar nombre con hash MD5 (evita duplicados)
-        extension = os.path.splitext(url_imagen.split("?")[0])[1] or ".jpg"
-        nombre_hash = hashlib.md5(url_imagen.encode()).hexdigest()[:12]
-        nombre_archivo = f"{nombre_hash}{extension}"
+        # Inferir mime si el servidor mandó algo genérico
+        mime = content_type.split(";")[0].strip()
+        if mime not in ("image/jpeg", "image/png", "image/webp", "image/gif"):
+            mime = mimetypes.guess_type(urlparse(url_imagen).path)[0] or "image/jpeg"
 
-        # Guardar archivo
-        _asegurar_directorio_imagenes()
-        ruta = os.path.join(IMAGENES_DIR, nombre_archivo)
-        with open(ruta, "wb") as f:
-            f.write(respuesta.content)
-
-        return Path("img", "eventos", nombre_archivo).as_posix()
+        return respuesta.content, mime
 
     except requests.exceptions.RequestException as e:
         print(f"Error de red descargando imagen: {e}")
-        return None
-    except OSError as e:
-        print(f"Error guardando imagen: {e}")
-        return None
+        return None, None

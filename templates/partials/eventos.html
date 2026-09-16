@@ -1,6 +1,10 @@
 <h1>Eventos</h1>
 <p class="bienvenida">Visualización de todos los eventos cargados. Para aprobar, modificar o eliminar, usá la pestaña Inicio.</p>
 
+{# Mismos filtros que en Inicio, pero apuntando a /eventos. #}
+{% set url = '/eventos' %}
+{% include "partials/filtros.html" %}
+
 {# Si no hay eventos, avisamos. Jinja2: las llaves dobles imprimen variables. #}
 {% if eventos %}
 <table>
@@ -20,9 +24,9 @@
         {% for evento in eventos %}
         <tr>
             <td>
-                {# Si tiene imagen descargada (ruta local), la mostramos; si no, nada. #}
+                {# Si tiene imagen en la BD, la mostramos; si no, nada. #}
                 {% if evento.imagen_url %}
-                <img src="/static/{{ evento.imagen_url }}" alt="{{ evento.titulo }}" width="120">
+                <img src="{{ evento.imagen_url }}" alt="{{ evento.titulo }}" width="120">
                 {% else %}
                 <em>sin imagen</em>
                 {% endif %}
@@ -45,5 +49,13 @@
 </table>
 
 {% else %}
+{% if q or estado %}
+<p>No hay eventos que coincidan con los filtros.</p>
+{% else %}
 <p>Todavía no hay eventos. Pasá por la pestaña "Scraping" para buscarlos.</p>
 {% endif %}
+{% endif %}
+
+<script>
+    marcarActiva('eventos');
+</script>

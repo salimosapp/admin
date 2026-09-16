@@ -44,7 +44,7 @@
             <th>Tipo</th>
             <th>URL</th>
             <th>Activa</th>
-            <th>Acción</th>
+            <th>Acciones</th>
         </tr>
     </thead>
     <tbody>
@@ -57,21 +57,50 @@
                 {# Mostramos el selector detectado en chiquito, para poder auditarlo. #}
                 {% set selector = fuente.selector_link or fuente.selector_item %}
                 {% if selector %}
-                <span class="pista">selector: {{ selector }}</span>
+                <br><span class="pista">selector: {{ selector }}</span>
                 {% endif %}
             </td>
             <td>{{ "Sí" if fuente.activa else "No" }}</td>
             <td>
-                {# Botón que activa/desactiva la fuente.
-                   hx-post: llama a la ruta /fuentes/<id>/estado.
-                   La respuesta (tabla actualizada) reemplaza el main. #}
-                <button
-                    class="{{ 'peligro' if fuente.activa else '' }}"
-                    hx-post="/fuentes/{{ fuente.id }}/estado"
-                    hx-target="#contenido"
-                    hx-swap="innerHTML">
-                    {{ "Desactivar" if fuente.activa else "Activar" }}
-                </button>
+                <div class="fila-acciones">
+                    {# Editar: abre el pop-up con todos los selectores para ajustarlos a mano. #}
+                    <button class="sutil"
+                            hx-get="/fuentes/{{ fuente.id }}/editar"
+                            hx-target="#modal"
+                            hx-swap="innerHTML">
+                        Editar
+                    </button>
+
+                    {# Probar: escrapea SOLO esta fuente y muestra cuántos eventos sacó. #}
+                    <button class="sutil"
+                            hx-post="/fuentes/{{ fuente.id }}/probar"
+                            hx-target="#contenido"
+                            hx-swap="innerHTML"
+                            hx-indicator="#spinner-{{ fuente.id }}">
+                        Probar
+                    </button>
+                    <span id="spinner-{{ fuente.id }}" class="probar-spinner htmx-indicator">
+                        <span class="spinner"></span>
+                    </span>
+
+                    {# Activar/desactivar la fuente (si la desactivás no se scrapea). #}
+                    <button
+                        class="{{ 'peligro' if fuente.activa else '' }}"
+                        hx-post="/fuentes/{{ fuente.id }}/estado"
+                        hx-target="#contenido"
+                        hx-swap="innerHTML">
+                        {{ "Desactivar" if fuente.activa else "Activar" }}
+                    </button>
+
+                    {# Eliminar definitivamente la fuente. #}
+                    <button class="peligro"
+                            hx-post="/fuentes/{{ fuente.id }}/eliminar"
+                            hx-target="#contenido"
+                            hx-swap="innerHTML"
+                            hx-confirm="¿Eliminar definitivamente la fuente «{{ fuente.nombre }}»?">
+                        Eliminar
+                    </button>
+                </div>
             </td>
         </tr>
         {% endfor %}
@@ -80,3 +109,7 @@
 {% else %}
 <p>No hay fuentes. Agregá la primera con el formulario de arriba.</p>
 {% endif %}
+
+<script>
+    marcarActiva('fuentes');
+</script>

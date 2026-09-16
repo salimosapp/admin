@@ -2,7 +2,9 @@
    El navegador muestra el elemento <dialog> con el atributo "open" como una
    ventana encima de todo. htmx inyecta esto dentro del contenedor #modal.
    Al guardar, la tarjeta (id card-<id>) se actualiza y el pop-up se cierra
-   con la función cerrarEdicion() (definida en index.html). #}
+   con la función cerrarEdicion() (definida en index.html).
+
+   Los inputs hidden conservan los filtros vigentes (estado y búsqueda). #}
 <dialog open>
     <h3>Editar evento</h3>
 
@@ -10,6 +12,9 @@
           hx-target="#card-{{ evento.id }}"
           hx-swap="outerHTML"
           hx-on::after-request="cerrarEdicion()">
+
+        <input type="hidden" name="estado" value="{{ estado or '' }}">
+        <input type="hidden" name="q" value="{{ q or '' }}">
 
         <label>Título *
             <input type="text" name="titulo" value="{{ evento.titulo }}" required>

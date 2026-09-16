@@ -1,0 +1,31 @@
+{# Barra de filtros compartida (se usa en Inicio y en Eventos).
+   Envía por htmx dos parámetros:
+   - q: texto de búsqueda (título, lugar o categoría)
+   - estado: "" (todos), "aprobados" o "pendientes"
+
+   "url" debe definirse antes de incluir este parcial (ej: {% set url='/inicio' %}).
+   La petición se hace sola al escribir (con una pequeña pausa) o al cambiar
+   el select, y la URL del navegador se actualiza con hx-push-url. #}
+<div class="barra-filtros">
+    <input type="search" name="q" value="{{ q or '' }}"
+           placeholder="Buscar por título, lugar o categoría..."
+           hx-get="{{ url }}"
+           hx-target="#contenido"
+           hx-swap="innerHTML"
+           hx-push-url="true"
+           hx-trigger="search, input changed delay:400ms"
+           hx-include="closest .barra-filtros">
+
+    <select name="estado"
+            hx-get="{{ url }}"
+            hx-target="#contenido"
+            hx-swap="innerHTML"
+            hx-push-url="true"
+            hx-include="closest .barra-filtros">
+        <option value="" {{ 'selected' if not estado else '' }}>Todos los estados</option>
+        <option value="aprobados" {{ 'selected' if estado == 'aprobados' else '' }}>Aprobados</option>
+        <option value="pendientes" {{ 'selected' if estado == 'pendientes' else '' }}>Pendientes</option>
+    </select>
+
+    <span class="pista">{{ eventos|length }} resultado(s)</span>
+</div>

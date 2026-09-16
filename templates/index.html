@@ -5,10 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Salimos · Panel admin</title>
 
-    {# htmx: librería que permite cargar pedazos de HTML por HTTP sin recargar
+{# htmx: librería que permite cargar pedazos de HTML por HTTP sin recargar
        la página. Se carga desde un CDN (no hace falta instalarla en Python).
-       Los atributos hx-get / hx-post / hx-target son los que usa htmx. #}
+       Los atributos hx-get / hx-post / hx-target / hx-swap son los que usa htmx. #}
     <script src="https://unpkg.com/htmx.org"></script>
+
+    {# Funciones globales. Acá (en <head>) quedan disponibles ANTES de que se
+       ejecuten los <script> de los parciales, que aparecen más abajo en el
+       documento y los invocan. #}
+    <script>
+        // Resalta el item del menú correspondiente a la sección actual.
+        // La navegación por htmx no recarga el <nav>, por eso cada parcial
+        // la llama al terminar.
+        function marcarActiva(seccion) {
+            var ruta = "/" + seccion;
+            document.querySelectorAll("nav a.link").forEach(function (a) {
+                a.classList.toggle("activo", a.getAttribute("href") === ruta);
+            });
+        }
+        // Cierra el pop-up de edición (vacía el contenedor #modal).
+        function cerrarEdicion() {
+            var m = document.getElementById("modal");
+            if (m) m.innerHTML = "";
+        }
+    </script>
 
     <style>
         /* Variables de colores del panel. Cambiando acá cambia toda la app. */
@@ -53,7 +73,7 @@
             font-weight: 700;
             color: var(--primario);
             text-decoration: none;
-            font-size: 1.05rem;
+            font-size: 1.35rem;
         }
         nav a.link {
             color: var(--texto-suave);
@@ -61,6 +81,16 @@
             font-weight: 500;
         }
         nav a.link:hover { color: var(--primario); }
+        /* Item del menú de la sección actual */
+        nav a.link.activo { color: var(--primario); font-weight: 700; }
+        nav a.link.activo::after {
+            content: "";
+            display: block;
+            height: 2px;
+            background: var(--primario);
+            border-radius: 2px;
+            margin-top: 2px;
+        }
 
         /* Contenido principal. Es donde htmx inyecta los parciales. */
         main {
@@ -142,6 +172,34 @@
             transform: scale(1.6);
             margin-right: 0.3rem;
         }
+
+        /* Barra de filtros (estado + búsqueda) de Inicio y Eventos */
+        .barra-filtros {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-bottom: 1.25rem;
+        }
+        .barra-filtros input[type="search"] { max-width: 340px; }
+        .barra-filtros select { width: auto; }
+        .barra-filtros .pista { margin: 0; }
+
+        /* Botón secundario (de bajo perfil) para acciones como "Probar" */
+        button.sutil { background: #eef2ff; color: var(--primario); }
+        button.sutil:hover { background: #e0e7ff; color: var(--primario-oscuro); }
+
+        /* Grupo de botones dentro de una fila de tabla (acciones de fuentes) */
+        .fila-acciones {
+            display: flex;
+            gap: 0.35rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        /* Spinner chico que acompaña a "Probar" mientras escrapea la fuente */
+        .probar-spinner { display: none; }
+        .probar-spinner.htmx-request { display: inline-flex; }
 
         /* Grilla de tarjetas de eventos */
         .grilla {
@@ -283,6 +341,12 @@
             font-size: 1.05rem;
             padding: 0.7rem 0.8rem;
         }
+        dialog .fila-check {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 0.5rem;
+        }
         dialog .acciones {
             grid-column: 1 / -1;
             display: flex;
@@ -299,13 +363,15 @@
     <div id="modal"></div>
 
     {# Navegación: cada link usa hx-get para cargar el parcial sin recargar,
-       dentro de #contenido, y actualiza la URL con hx-push-url. #}
+       dentro de #contenido, y actualiza la URL con hx-push-url.
+       La clase "activo" se setea acá en la carga completa y la ajusta
+       marcarActiva() cuando se navega por htmx. #}
     <nav>
-        <a class="marca" href="/" hx-get="/inicio" hx-target="#contenido" hx-push-url="true">Salimos</a>
-        <a class="link" href="/inicio" hx-get="/inicio" hx-target="#contenido" hx-push-url="true">Inicio</a>
-        <a class="link" href="/eventos" hx-get="/eventos" hx-target="#contenido" hx-push-url="true">Eventos</a>
-        <a class="link" href="/fuentes" hx-get="/fuentes" hx-target="#contenido" hx-push-url="true">Fuentes</a>
-        <a class="link" href="/scraping" hx-get="/scraping" hx-target="#contenido" hx-push-url="true">Scraping</a>
+        <a class="marca" href="/" hx-get="/inicio" hx-target="#contenido" hx-push-url="true">¿Salimos?</a>
+        <a class="link{{ ' activo' if seccion == 'inicio' }}" href="/inicio" hx-get="/inicio" hx-target="#contenido" hx-push-url="true">Inicio</a>
+        <a class="link{{ ' activo' if seccion == 'eventos' }}" href="/eventos" hx-get="/eventos" hx-target="#contenido" hx-push-url="true">Eventos</a>
+        <a class="link{{ ' activo' if seccion == 'fuentes' }}" href="/fuentes" hx-get="/fuentes" hx-target="#contenido" hx-push-url="true">Fuentes</a>
+        <a class="link{{ ' activo' if seccion == 'scraping' }}" href="/scraping" hx-get="/scraping" hx-target="#contenido" hx-push-url="true">Scraping</a>
     </nav>
 
     {# Acá cada parcial reemplaza el contenido.
@@ -314,12 +380,5 @@
     <main id="contenido">
         {{ contenido|safe }}
     </main>
-
-    <script>
-        function cerrarEdicion() {
-            var m = document.getElementById('modal');
-            if (m) m.innerHTML = '';
-        }
-    </script>
 </body>
 </html>

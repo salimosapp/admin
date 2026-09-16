@@ -1,12 +1,18 @@
 {# Tarjeta individual de evento.
    El id "card-<id>" es la clave: las acciones htmx apuntan a ese id para
-   reemplazar SOLO esta tarjeta (editar, aprobar) o borrarla (eliminar). #}
+   reemplazar SOLO esta tarjeta (editar, aprobar) o borrarla (eliminar).
+
+   Los inputs hidden + hx-include en cada botón hacen que las acciones
+   individuales conserven los filtros (estado y búsqueda) vigentes. #}
 <div id="card-{{ evento.id }}" class="tarjeta-admin">
     {% if evento.imagen_url %}
-    <img src="/static/{{ evento.imagen_url }}" alt="{{ evento.titulo }}">
+    <img src="{{ evento.imagen_url }}" alt="{{ evento.titulo }}">
     {% endif %}
 
     <div class="cuerpo">
+        <input type="hidden" name="estado" value="{{ estado or '' }}">
+        <input type="hidden" name="q" value="{{ q or '' }}">
+
         <div class="encabezado">
             <span class="badge {{ 'ok' if evento.aprobado else 'no' }}">
                 {{ "Aprobado" if evento.aprobado else "Pendiente" }}
@@ -28,13 +34,15 @@
                 <button class="btn-accion devolver"
                         hx-post="/eventos/{{ evento.id }}/aprobar"
                         hx-target="#card-{{ evento.id }}"
-                        hx-swap="outerHTML">
+                        hx-swap="outerHTML"
+                        hx-include="closest .tarjeta-admin">
                     Devolver
                 </button>
                 <button class="btn-accion peligro"
                         hx-post="/eventos/{{ evento.id }}/eliminar"
                         hx-target="#contenido"
                         hx-swap="innerHTML"
+                        hx-include="closest .tarjeta-admin"
                         hx-confirm="¿Eliminar este evento?">
                     Eliminar
                 </button>
@@ -43,19 +51,22 @@
                 <button class="btn-accion aceptar"
                         hx-post="/eventos/{{ evento.id }}/aprobar"
                         hx-target="#card-{{ evento.id }}"
-                        hx-swap="outerHTML">
+                        hx-swap="outerHTML"
+                        hx-include="closest .tarjeta-admin">
                     Aceptar
                 </button>
                 <button class="btn-accion editar"
                         hx-get="/eventos/{{ evento.id }}/editar"
                         hx-target="#modal"
-                        hx-swap="innerHTML">
+                        hx-swap="innerHTML"
+                        hx-include="closest .tarjeta-admin">
                     Editar
                 </button>
                 <button class="btn-accion peligro"
                         hx-post="/eventos/{{ evento.id }}/eliminar"
                         hx-target="#contenido"
                         hx-swap="innerHTML"
+                        hx-include="closest .tarjeta-admin"
                         hx-confirm="¿Eliminar este evento?">
                     Eliminar
                 </button>

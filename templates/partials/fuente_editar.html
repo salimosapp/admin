@@ -1,0 +1,58 @@
+{# Pop-up (modal) de edición de una fuente.
+   Muestra los selectores, que es la única forma de ajustarlos a mano
+   cuando la IA no pudo detectarlos. Al guardar, se refresca la tabla de
+   fuentes dentro de #contenido y se cierra el pop-up. #}
+<dialog open>
+    <h3>Editar fuente</h3>
+
+    <form hx-post="/fuentes/{{ fuente.id }}/actualizar"
+          hx-target="#contenido"
+          hx-swap="innerHTML"
+          hx-on::after-request="cerrarEdicion()">
+
+        <label>Nombre *
+            <input type="text" name="nombre" value="{{ fuente.nombre }}" required>
+        </label>
+
+        <label>Tipo *
+            <select name="tipo">
+                <option value="listado_noticias" {{ 'selected' if fuente.tipo == 'listado_noticias' }}>Listado de noticias</option>
+                <option value="cartelera" {{ 'selected' if fuente.tipo == 'cartelera' }}>Cartelera</option>
+            </select>
+        </label>
+
+        <label class="campo-largo">URL *
+            <input type="text" name="url" value="{{ fuente.url }}" required>
+        </label>
+
+        <label>Selector de links
+            <input type="text" name="selector_link" value="{{ fuente.selector_link or '' }}">
+            <span class="pista">Links a artículos (lista de noticias)</span>
+        </label>
+
+        <label>Selector de items
+            <input type="text" name="selector_item" value="{{ fuente.selector_item or '' }}">
+            <span class="pista">Tarjetas de eventos (cartelera)</span>
+        </label>
+
+        <label>Selector de imagen
+            <input type="text" name="selector_imagen" value="{{ fuente.selector_imagen or '' }}">
+            <span class="pista">Imagen dentro de cada tarjeta (opcional)</span>
+        </label>
+
+        <label>Lugar fijo
+            <input type="text" name="lugar_fijo" value="{{ fuente.lugar_fijo or '' }}">
+            <span class="pista">Si el sitio pertenece a un único lugar</span>
+        </label>
+
+        <label class="campo-largo fila-check">
+            <input type="checkbox" name="activa" {{ 'checked' if fuente.activa else '' }}>
+            Activa (se usa en el scraping)
+        </label>
+
+        <div class="acciones">
+            <button type="submit" class="btn-accion aceptar">Guardar</button>
+            <button type="button" class="btn-accion peligro" onclick="cerrarEdicion()">Cancelar</button>
+        </div>
+    </form>
+</dialog>

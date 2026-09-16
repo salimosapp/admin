@@ -2,17 +2,24 @@
 <p class="bienvenida">Recorre las fuentes activas, detecta eventos con la IA y los guarda en la base.
 Puede tardar unos minutos.</p>
 
+{% if mensaje %}
+<p class="ok mensaje">{{ mensaje }}</p>
+{% endif %}
+{% if error %}
+<p class="error">{{ error }}</p>
+{% endif %}
+
 <div class="accion-grupo">
     {# boton-grande: inicia el scraping con POST.
        Mientras corre, el botón se deshabilita y muestra un spinner.
        hx-indicator: muestra el div .progreso durante la petición. #}
     <button id="btn-scraping" class="boton-grande"
             hx-post="/scraping/iniciar"
-            hx-target="#scraping-contenido"
+            hx-target="#contenido"
             hx-swap="innerHTML"
             hx-indicator="#scraping-progreso"
-            hx-on::before-request="document.getElementById('btn-scraping').disabled = true; document.getElementById('btn-scraping').textContent = 'Escrapeando...';"
-            hx-on::after-request="document.getElementById('btn-scraping').disabled = false; document.getElementById('btn-scraping').textContent = 'Volver a escrapear';">
+            hx-on::before-request="document.getElementById('btn-scraping').disabled = true;"
+            hx-on::after-request="var btn = document.getElementById('btn-scraping'); if (btn) btn.disabled = false;">
         Iniciar scraping
     </button>
 
@@ -20,7 +27,64 @@ Puede tardar unos minutos.</p>
         <span class="spinner"></span>
         Procesando las fuentes... esto puede tardar unos minutos.
     </div>
+
+    {# Resultado de la última corrida (se muestra solo después de ejecutar). #}
+    {% if resultado %}
+    <div class="resultado-scraping">
+        <h3>Scraping completado</h3>
+        <p>
+            <strong>{{ resultado.total }}</strong> eventos procesados
+            ({{ resultado.nuevos }} nuevos, {{ resultado.actualizados }} actualizados
+            {% if resultado.errores %}, {{ resultado.errores }} con error{% endif %})
+            en {{ resultado.duracion }} segundos.
+        </p>
+        <a class="enlace" href="/inicio">Ir al Inicio para revisarlos</a>
+    </div>
+    {% endif %}
 </div>
 
-<div id="scraping-contenido" style="margin-top: 1.5rem;">
-</div>
+{# Historial de corridas: cada vez que se escrapea se registra una fila,
+   ya sea de TODAS las fuentes (fuente_id NULL) o de una sola (fuente_id). #}
+<h2>Historial de scrapings</h2>
+{% if historial %}
+<table>
+    <thead>
+        <tr>
+            <th>Fecha</th>
+            <th>Fuente</th>
+            <th>Nuevos</th>
+            <th>Actualizados</th>
+            <th>Con error</th>
+            <th>Total</th>
+            <th>Duración</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for corrida in historial %}
+        <tr>
+            <td>{{ corrida.fecha.strftime('%d/%m/%Y %H:%M') }}</td>
+            <td>
+                {% if corrida.fuente_id and corrida.fuente_nombre %}
+                    {{ corrida.fuente_nombre }}
+                {% elif corrida.fuente_id %}
+                    Fuente eliminada
+                {% else %}
+                    Todas las fuentes
+                {% endif %}
+            </td>
+            <td>{{ corrida.nuevos }}</td>
+            <td>{{ corrida.actualizados }}</td>
+            <td>{{ corrida.errores }}</td>
+            <td><strong>{{ corrida.total }}</strong></td>
+            <td>{{ corrida.duracion_seg|round(1) if corrida.duracion_seg is not none else "—" }} s</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No hay corridas registradas todavía. Iniciá el scraping para ver el historial acá.</p>
+{% endif %}
+
+<script>
+    marcarActiva('scraping');
+</script>

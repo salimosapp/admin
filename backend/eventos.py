@@ -22,28 +22,55 @@ def _procesar_fechas(eventos: list[dict]) -> None:
 
 COLUMNAS = (
     "id, titulo, fecha_hora, lugar, categoria, precio, "
-    "link_fuente, descripcion, imagen_url, aprobado"
+    "link_fuente, descripcion, imagen_url, aprobado, "
+    "(imagen_datos IS NOT NULL AND octet_length(imagen_datos) > 0) AS tiene_imagen"
 )
 
 
-def obtener_eventos(aprobados=None) -> list[dict]:
+def _resolver_imagen(eventos):
+    """
+    Convierte la presencia de imagen en la BD a una URL servible.
+
+    La imagen vive en la columna imagen_datos (BYTEA). La "URL" que se pasa a
+    las plantillas es una ruta interna que cada app sirve desde la base
+    (/imagenes/eventos/<id>). Si el evento no tiene imagen, queda None y la
+    tarjeta muestra el placeholder.
+    """
+    for evento in eventos:
+        if evento.get("tiene_imagen"):
+            evento["imagen_url"] = f"/imagenes/eventos/{evento['id']}"
+        else:
+            evento["imagen_url"] = None
+
+
+def obtener_eventos(aprobados=None, texto=None) -> list[dict]:
     """
     Devuelve los eventos de la base, ordenados por fecha (el próximo primero).
 
     Args:
         aprobados: None = todos; True = solo aprobados; False = solo pendientes.
+        texto: si se pasa, filtra por coincidencia en título, lugar o categoría.
     """
     conexion = conectar()
     cursor = conexion.cursor()
 
-    sql = f"""
-        SELECT {COLUMNAS}
-        FROM eventos
-    """
-    parametros = None
+    condiciones = ["fecha_hora >= NOW()"]
+    parametros = []
+
     if aprobados is not None:
-        sql += " WHERE aprobado = %s"
-        parametros = (aprobados,)
+        condiciones.append("aprobado = %s")
+        parametros.append(aprobados)
+
+    if texto:
+        condiciones.append(
+            "(titulo ILIKE %s OR lugar ILIKE %s OR categoria ILIKE %s)"
+        )
+        patron = f"%{texto}%"
+        parametros.extend([patron, patron, patron])
+
+    sql = f"SELECT {COLUMNAS} FROM eventos"
+    if condiciones:
+        sql += " WHERE " + " AND ".join(condiciones)
     sql += " ORDER BY fecha_hora ASC"
 
     cursor.execute(sql, parametros)
@@ -52,6 +79,7 @@ def obtener_eventos(aprobados=None) -> list[dict]:
     cursor.close()
     conexion.close()
 
+    _resolver_imagen(eventos)
     _procesar_fechas(eventos)
     return eventos
 
@@ -72,7 +100,9 @@ def obtener_evento_por_id(evento_id: int) -> dict | None:
 
     if fila is None:
         return None
-    return dict(zip(columnas, fila))
+    evento = dict(zip(columnas, fila))
+    _resolver_imagen([evento])
+    return evento
 
 
 def toggle_aprobacion(evento_id: int) -> bool:
