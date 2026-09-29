@@ -28,6 +28,15 @@
             var m = document.getElementById("modal");
             if (m) m.innerHTML = "";
         }
+
+        // Si la sesión se venció mientras navegábamos, el servidor responde
+        // 401 a las peticiones de htmx. Acá lo detectamos y recargamos la
+        // página, que vuelve al login con una navegación normal.
+        document.addEventListener("htmx:responseError", function (evt) {
+            if (evt.detail.xhr.status === 401) {
+                window.location.href = "/login";
+            }
+        });
     </script>
 
     <style>
@@ -91,6 +100,18 @@
             border-radius: 2px;
             margin-top: 2px;
         }
+
+        /* Botón "Salir": forma de link, pero en la punta derecha del nav.
+           El <form> no puede heredar el flex del nav, así que se estira. */
+        nav .salir { margin-left: auto; }
+        nav .btn-salir {
+            background: none;
+            border: 1px solid var(--borde);
+            color: var(--texto-suave);
+            font-size: 0.85rem;
+            padding: 0.35rem 0.8rem;
+        }
+        nav .btn-salir:hover { background: var(--superficie); color: var(--peligro); border-color: var(--peligro); }
 
         /* Contenido principal. Es donde htmx inyecta los parciales. */
         main {
@@ -372,6 +393,13 @@
         <a class="link{{ ' activo' if seccion == 'eventos' }}" href="/eventos" hx-get="/eventos" hx-target="#contenido" hx-push-url="true">Eventos</a>
         <a class="link{{ ' activo' if seccion == 'fuentes' }}" href="/fuentes" hx-get="/fuentes" hx-target="#contenido" hx-push-url="true">Fuentes</a>
         <a class="link{{ ' activo' if seccion == 'scraping' }}" href="/scraping" hx-get="/scraping" hx-target="#contenido" hx-push-url="true">Scraping</a>
+
+        {# Botón "Salir", pegado a la derecha. Va en un <form> porque el
+           logout es un POST: así no se puede desloguear con un simple clic
+           en un enlace prefetchado por el navegador. #}
+        <form method="post" action="/logout" class="salir">
+            <button type="submit" class="btn-salir">Salir</button>
+        </form>
     </nav>
 
     {# Acá cada parcial reemplaza el contenido.

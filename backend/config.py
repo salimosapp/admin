@@ -26,6 +26,21 @@ DB_PORT = os.getenv("DB_PORT")
 DB_NAME = os.getenv("DB_NAME")
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
+# Postgres administrados (Neon, Supabase) exigen conexión cifrada.
+# Vacío = comportamiento por defecto de psycopg2, que sirve para tu Postgres local.
+DB_SSLMODE = os.getenv("DB_SSLMODE")
+
+# --- Sesión / login ---
+# Firma las cookies de sesión. Si cambiás esta clave, se cierran las sesiones
+# abiertas. Sin ella, Flask reinicia la sesión en cada arranque.
+SECRET_KEY = os.getenv("SECRET_KEY") or os.urandom(32).hex()
+# Credenciales del único administrador. Los valores por defecto son para
+# probar en tu máquina: cambialos antes de publicar la app.
+ADMIN_USER = os.getenv("ADMIN_USER", "admin")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "123456")
+# La cookie de sesión solo viaja por HTTPS cuando esto está en True.
+# Ponelo en True en el hosting (Render), dejalo False en local (http://).
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
 
 # --- Scraping ---
 SCRAPING_LOTE_TAMANO = 10

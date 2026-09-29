@@ -16,13 +16,13 @@ import sys
 import os
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Agregamos el directorio raíz al path para que el paquete "backend"
 # sea importable (Python necesita saber dónde buscar los módulos).
 sys.path.insert(0, os.path.dirname(__file__))
 
-from flask import Flask, render_template, request, abort, Response
+from flask import Flask, render_template, request, abort, Response, redirect, url_for, session
 
 from backend.db import inicializar_db, conectar
 from backend.eventos import (
@@ -42,17 +42,53 @@ from backend.fuentes import (
     toggle_estado,
     eliminar_fuente,
 )
+from backend.config import (
+    ADMIN_USER,
+    ADMIN_PASSWORD,
+    SECRET_KEY,
+    COOKIE_SECURE,
+)
 from backend.extractor import ejecutar
 from backend.scrapings import obtener_historial
 from backend.ia import detectar_selectores
+from backend.auth import (
+    credenciales_validas,
+    exigir_login,
+    cerrar_sesion,
+    usuario_autenticado,
+    destino_despues_de_login,
+)
 
 # Creamos la aplicación Flask.
 app = Flask(__name__)
+
+# Firma de las cookies de sesión y flags de privacidad de la cookie.
+app.secret_key = SECRET_KEY
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=COOKIE_SECURE,
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
+)
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
+
+# --- Avisos de configuración ---
+
+if (ADMIN_USER, ADMIN_PASSWORD) == ("admin", "123456"):
+    logging.warning(
+        "Usando las credenciales por defecto (admin / 123456). "
+        "Cambiá ADMIN_USER y ADMIN_PASSWORD antes de publicar la app."
+    )
+
+if COOKIE_SECURE is False:
+    logging.info("SESSION_COOKIE_SECURE=False: la cookie viaja sin cifrar (solo para local).")
+
+# Todas las rutas exigen sesión abierta salvo /login y los archivos estáticos.
+app.before_request(exigir_login)
 
 # Al iniciar, creamos las tablas en la base de datos si no existen.
 with app.app_context():
@@ -166,6 +202,44 @@ def _parsear_ids(ids_texto: str) -> list[int]:
 
 
 # --- Rutas de la app ---
+
+
+# --- Login / logout ---
+# Estas dos rutas son las únicas públicas (ver exigir_login en backend/auth.py).
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    """Formulario de acceso. Solo hay un usuario administrador."""
+    if usuario_autenticado():
+        return redirect(url_for("inicio"))
+
+    error = None
+    if request.method == "POST":
+        usuario = request.form.get("usuario", "").strip()
+        clave = request.form.get("clave", "")
+        if credenciales_validas(usuario, clave):
+            session.clear()
+            session["usuario"] = usuario
+            session.permanent = True
+            logging.info("Login correcto para %s desde %s", usuario, request.remote_addr)
+            return redirect(destino_despues_de_login())
+        error = "Usuario o contraseña incorrectos."
+        logging.warning(
+            "Login fallido para %r desde %s", usuario, request.remote_addr
+        )
+
+    return render_template(
+        "login.html",
+        error=error,
+        next=request.values.get("next", ""),
+    )
+
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    """Cierra la sesión y vuelve al login."""
+    return cerrar_sesion()
 
 
 @app.route("/")
@@ -485,4 +559,9 @@ def scraping_iniciar():
 
 
 if __name__ == "__main__":
-    app.run()
+    # En Render/Neon el puerto lo inyecta la plataforma en la variable PORT.
+    # Localmente usamos 5000, y 0.0.0.0 para poder entrar desde el celular.
+    app.run(
+        host=os.getenv("HOST", "0.0.0.0"),
+        port=int(os.getenv("PORT", "5000")),
+    )

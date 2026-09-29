@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salimos · Entrar</title>
+
+    <style>
+        /* Mismas variables de color que index.html, para que el login se vea
+           como parte del mismo panel. */
+        :root {
+            --fondo: #f4f6fb;
+            --superficie: #ffffff;
+            --texto: #1f2937;
+            --texto-suave: #6b7280;
+            --primario: #2563eb;
+            --primario-oscuro: #1d4ed8;
+            --borde: #e5e7eb;
+            --peligro: #dc2626;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html { font-size: 17px; }
+
+        body {
+            font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+            background: var(--fondo);
+            color: var(--texto);
+            min-height: 100vh;
+            /* Centra la tarjeta en horizontal y vertical */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+        }
+
+        .caja {
+            background: var(--superficie);
+            border: 1px solid var(--borde);
+            border-radius: 14px;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+            width: min(400px, 100%);
+            overflow: hidden;
+        }
+
+        .encabezado {
+            padding: 1.75rem 1.5rem 1.25rem;
+            text-align: center;
+            border-bottom: 1px solid var(--borde);
+        }
+        .encabezado h1 { font-size: 1.6rem; color: var(--primario); }
+        .encabezado p { color: var(--texto-suave); font-size: 0.88rem; margin-top: 0.35rem; }
+
+        form { padding: 1.5rem; display: grid; gap: 0.9rem; }
+
+        label { display: block; font-size: 0.82rem; color: var(--texto-suave); margin-bottom: 0.25rem; }
+        input {
+            width: 100%;
+            padding: 0.65rem 0.7rem;
+            border: 1px solid var(--borde);
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+        input:focus { outline: 2px solid var(--primario); border-color: transparent; }
+
+        button {
+            padding: 0.7rem 1rem;
+            border: none;
+            border-radius: 8px;
+            background: var(--primario);
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 0.25rem;
+        }
+        button:hover { background: var(--primario-oscuro); }
+
+        .error {
+            background: #fee2e2;
+            color: var(--peligro);
+            padding: 0.6rem 0.75rem;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            font-weight: 500;
+        }
+
+        .pie {
+            padding: 0 1.5rem 1.5rem;
+            color: var(--texto-suave);
+            font-size: 0.8rem;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="caja">
+        <div class="encabezado">
+            <h1>¿Salimos?</h1>
+            <p>Panel de administración</p>
+        </div>
+
+        {# El campo oculto "next" guarda a qué URL volver después de entrar.
+           Lo manda la redirección de exigir_login() cuando te quedás sin
+           sesión en el medio de la navegación. #}
+        <form method="post" action="/login">
+            <input type="hidden" name="next" value="{{ next }}">
+
+            {% if error %}
+            <div class="error">{{ error }}</div>
+            {% endif %}
+
+            <div>
+                <label for="usuario">Usuario</label>
+                <input type="text" id="usuario" name="usuario" autocomplete="username" required autofocus>
+            </div>
+
+            <div>
+                <label for="clave">Contraseña</label>
+                <input type="password" id="clave" name="clave" autocomplete="current-password" required>
+            </div>
+
+            <button type="submit">Entrar</button>
+        </form>
+
+        <p class="pie">Acceso restringido al equipo de gestión.</p>
+    </div>
+</body>
+</html>
