@@ -90,7 +90,7 @@ if COOKIE_SECURE is False:
 # Todas las rutas exigen sesión abierta salvo /login y los archivos estáticos.
 app.before_request(exigir_login)
 
-# Al iniciar, creamos las tablas en la base de datos si no existen.
+# Al iniciar, creamos las tablas en la base de datos si no existen. y iniciarizamos la conexión.
 with app.app_context():
     inicializar_db()
 
