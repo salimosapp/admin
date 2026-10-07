@@ -92,6 +92,7 @@ app.before_request(exigir_login)
 
 # Al iniciar, creamos las tablas en la base de datos si no existen.
 with app.app_context():
+    # Esto lo hago para que render lea primero la db . solo lo pongo en el de admin osea este
     inicializar_db()
 
 
