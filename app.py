@@ -33,6 +33,7 @@ from backend.eventos import (
     actualizar_evento,
     aprobar_muchos,
     eliminar_muchos,
+    limpiar_eventos_pasados,
 )
 from backend.fuentes import (
     obtener_todas_las_fuentes,
@@ -51,6 +52,18 @@ from backend.config import (
 from backend.extractor import ejecutar
 from backend.scrapings import obtener_historial
 from backend.ia import detectar_selectores
+from backend.formato import precio_display
+from backend.solicitudes import (
+    obtener_solicitudes,
+    obtener_solicitud_por_id,
+    obtener_solicitud_card,
+    actualizar_solicitud,
+    aprobar_solicitud,
+    devolver_solicitud,
+    eliminar_solicitud,
+    solicitudes_habilitadas,
+    establecer_solicitudes_habilitadas,
+)
 from backend.auth import (
     credenciales_validas,
     exigir_login,
@@ -93,6 +106,16 @@ app.before_request(exigir_login)
 # Al iniciar, creamos las tablas en la base de datos si no existen. y iniciarizamos la conexión.
 with app.app_context():
     inicializar_db()
+
+# --- Limpieza automática de eventos pasados ---
+# Sacamos de la base los eventos cuya fecha ya venció (ya no se ven en
+# ninguna vista y no queremos guardarlos al pedo). Se hace al arrancar
+# (y antes de cada scraping, en backend/extractor.py).
+try:
+    limpiar_eventos_pasados()
+    logging.info("Limpieza de eventos pasados completada.")
+except Exception:
+    logging.exception("Falló la limpieza de eventos pasados")
 
 
 # --- Helpers ---
@@ -190,6 +213,31 @@ def _render_fuentes(mensaje: str | None = None, error: str | None = None):
     )
 
 
+def _render_solicitudes(mensaje: str | None = None):
+    """
+    Devuelve la vista de solicitudes del público (lista + interruptor de la web).
+    """
+    solicitudes = obtener_solicitudes()
+    return _render_pagina(
+        "partials/solicitudes.html",
+        solicitudes=solicitudes,
+        habilitadas=solicitudes_habilitadas(),
+        mensaje=mensaje,
+        seccion="solicitudes",
+    )
+
+
+def _render_solicitud_card(solicitud_id: int):
+    """
+    Devuelve la tarjeta de UNA solicitud. Se usa cuando la edición modifica
+    una sola tarjeta y htmx debe reemplazarla sin recargar toda la lista.
+    """
+    solicitud = obtener_solicitud_card(solicitud_id)
+    if solicitud is None:
+        abort(404)
+    return render_template("partials/solicitud_card.html", solicitud=solicitud)
+
+
 def _parsear_ids(ids_texto: str) -> list[int]:
     """
     Convierte el texto '"1","2","3"' (que envía htmx con hx-vals) en una
@@ -199,6 +247,15 @@ def _parsear_ids(ids_texto: str) -> list[int]:
         return [int(x) for x in json.loads(ids_texto)]
     except (ValueError, TypeError, json.JSONDecodeError):
         return []
+
+
+# --- Helpers disponibles para las plantillas ---
+
+
+@app.context_processor
+def utilidades_de_plantilla():
+    """Expone helpers de formato a todas las plantillas (ej: precio_display)."""
+    return {"precio_display": precio_display}
 
 
 # --- Rutas de la app ---
@@ -529,6 +586,130 @@ def fuentes_probar(fuente_id: int):
     mensaje = f"Fuente «{fuente['nombre']}» escrapeada: {', '.join(partes)}."
 
     return _render_fuentes(mensaje=mensaje)
+
+
+# --- Solicitudes del público ---
+
+
+@app.route("/solicitudes")
+def solicitudes():
+    """Vista de las propuestas de eventos que envió el público desde la web."""
+    return _render_solicitudes()
+
+
+@app.route("/solicitudes/habilitar", methods=["POST"])
+def solicitudes_habilitar():
+    """
+    Prende/apaga el botón "Solicitar un evento" de la web pública. El estado
+    se guarda en la tabla `configuracion` y la web lo consulta al cargar.
+    """
+    establecer_solicitudes_habilitadas(not solicitudes_habilitadas())
+    return _render_solicitudes()
+
+
+@app.route("/imagenes/solicitudes/<int:solicitud_id>")
+def imagen_solicitud(solicitud_id: int):
+    """
+    Sirve la imagen que subió el público junto a su solicitud. Igual que para
+    los eventos, la imagen vive en la base (columna imagen_datos).
+    """
+    conexion = conectar()
+    cursor = conexion.cursor()
+    cursor.execute(
+        "SELECT imagen_datos, imagen_mime FROM solicitudes_eventos WHERE id = %s",
+        (solicitud_id,),
+    )
+    fila = cursor.fetchone()
+    cursor.close()
+    conexion.close()
+
+    if fila is None or not fila[0] or len(fila[0]) == 0:
+        abort(404)
+
+    return Response(
+        bytes(fila[0]),
+        mimetype=fila[1] or "image/jpeg",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
+@app.route("/solicitudes/<int:solicitud_id>/aprobar", methods=["POST"])
+def solicitudes_aprobar(solicitud_id: int):
+    """
+    Aprobar = crear el evento ya aprobado (así aparece en la web). La solicitud
+    queda marcada como aprobada, para poder devolverla o eliminarla.
+    """
+    if not aprobar_solicitud(solicitud_id):
+        abort(404)
+    return _render_solicitudes(
+        mensaje="Solicitud aprobada: el evento ya está publicado en la web."
+    )
+
+
+@app.route("/solicitudes/<int:solicitud_id>/devolver", methods=["POST"])
+def solicitudes_devolver(solicitud_id: int):
+    """
+    Devolver = deshacer la aprobación: despublica el evento que creó y vuelve
+    la solicitud a pendiente.
+    """
+    if not devolver_solicitud(solicitud_id):
+        abort(404)
+    return _render_solicitudes(
+        mensaje="Solicitud devuelta a pendiente; el evento se despublicó de la web."
+    )
+
+
+@app.route("/solicitudes/<int:solicitud_id>/eliminar", methods=["POST"])
+def solicitudes_eliminar(solicitud_id: int):
+    """Descarta una solicitud (y su evento publicado, si lo tenía)."""
+    borrados = eliminar_solicitud(solicitud_id)
+    if borrados:
+        mensaje = "Solicitud eliminada y su evento se quitó de la web."
+    else:
+        mensaje = "Solicitud eliminada."
+    return _render_solicitudes(mensaje=mensaje)
+
+
+@app.route("/solicitudes/<int:solicitud_id>/editar")
+def solicitudes_editar(solicitud_id: int):
+    """Devuelve el pop-up de edición de una solicitud."""
+    solicitud = obtener_solicitud_por_id(solicitud_id)
+    if solicitud is None:
+        abort(404)
+    return render_template("partials/solicitud_editar.html", solicitud=solicitud)
+
+
+@app.route("/solicitudes/<int:solicitud_id>/actualizar", methods=["POST"])
+def solicitudes_actualizar(solicitud_id: int):
+    """
+    Recibe el form de edición, actualiza la solicitud y devuelve la tarjeta
+    actualizada (para que htmx la vuelva a poner en su lugar y cierre el pop-up).
+    """
+    solicitud_vieja = obtener_solicitud_por_id(solicitud_id)
+    if solicitud_vieja is None:
+        abort(404)
+
+    titulo = request.form.get("titulo", "").strip()
+    lugar = request.form.get("lugar", "").strip() or None
+    categoria = request.form.get("categoria", "").strip() or None
+    precio = request.form.get("precio", "").strip() or None
+    descripcion = request.form.get("descripcion", "").strip() or None
+    link_fuente = request.form.get("link_fuente", "").strip() or None
+    contacto = request.form.get("contacto", "").strip() or None
+
+    # La fecha llega como "YYYY-MM-DD HH:MM". Si no se puede interpretar,
+    # conservamos la fecha que ya tenía la solicitud.
+    fecha_texto = request.form.get("fecha_hora", "").strip()
+    try:
+        fecha_hora = datetime.strptime(fecha_texto, "%Y-%m-%d %H:%M")
+    except ValueError:
+        fecha_hora = solicitud_vieja["fecha_hora"]
+
+    actualizar_solicitud(
+        solicitud_id, titulo, fecha_hora, lugar, categoria,
+        precio, descripcion, link_fuente, contacto,
+    )
+    return _render_solicitud_card(solicitud_id)
 
 
 # --- Scraping ---

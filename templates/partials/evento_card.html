@@ -24,7 +24,7 @@
         <h3>{{ evento.titulo }}</h3>
         <div class="fecha">{{ evento.fecha_hora }}</div>
         {% if evento.lugar %}<div class="lugar">{{ evento.lugar }}</div>{% endif %}
-        {% if evento.precio %}<div class="precio">{{ evento.precio }}</div>{% endif %}
+        {% if evento.precio %}<div class="precio">{{ precio_display(evento.precio) }}</div>{% endif %}
         {% if evento.descripcion %}<div class="descripcion">{{ evento.descripcion }}</div>{% endif %}
 
         {# Botones según el estado del evento. Todos del mismo ancho, en fila. #}

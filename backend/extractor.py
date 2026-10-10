@@ -17,6 +17,7 @@ from backend.config import (
     SCRAPING_USER_AGENT,
 )
 from backend.db import conectar
+from backend.eventos import limpiar_eventos_pasados
 from backend.fuentes import obtener_fuentes
 from backend.ia import extraer_eventos
 from backend.scrapings import registrar_scraping
@@ -271,6 +272,9 @@ def ejecutar(fuente_id: int | None = None) -> dict:
     nuevos = 0
     actualizados = 0
     errores = 0
+
+    # Antes de scrapear, tiramos los eventos cuya fecha ya pasó.
+    limpiar_eventos_pasados()
 
     fuentes = obtener_fuentes()
     if fuente_id is not None:

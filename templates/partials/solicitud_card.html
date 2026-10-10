@@ -1,0 +1,68 @@
+{# Tarjeta individual de una solicitud del público.
+   El id "sol-<id>" permite reemplazar SOLO esta tarjeta tras editarla.
+   Los botones cambian según el estado, igual que las tarjetas de Inicio:
+   - pendiente: Aprobar / Editar / Eliminar
+   - aprobada:  Devolver / Eliminar #}
+<div id="sol-{{ solicitud.id }}" class="tarjeta-admin">
+    {% if solicitud.imagen_url %}
+    <img src="{{ solicitud.imagen_url }}" alt="{{ solicitud.titulo }}">
+    {% endif %}
+
+    <div class="cuerpo">
+        <div class="encabezado">
+            <span class="badge {{ 'ok' if solicitud.estado == 'aprobado' else 'no' }}">
+                {{ "Aprobado" if solicitud.estado == "aprobado" else "Pendiente" }}
+            </span>
+        </div>
+
+        <span class="categoria">{{ solicitud.categoria or "Solicitud" }}</span>
+        <h3>{{ solicitud.titulo }}</h3>
+        <div class="fecha">{{ solicitud.fecha_hora or "Sin fecha" }}</div>
+        {% if solicitud.lugar %}<div class="lugar">{{ solicitud.lugar }}</div>{% endif %}
+        {% if solicitud.precio %}<div class="precio">{{ precio_display(solicitud.precio) }}</div>{% endif %}
+        {% if solicitud.contacto %}<div class="lugar">Contacto: {{ solicitud.contacto }}</div>{% endif %}
+        {% if solicitud.descripcion %}<div class="descripcion">{{ solicitud.descripcion }}</div>{% endif %}
+        {% if solicitud.link_fuente %}
+        <div class="lugar"><a href="{{ solicitud.link_fuente }}" target="_blank">Ver fuente</a></div>
+        {% endif %}
+
+        <div class="acciones">
+            {% if solicitud.estado == "aprobado" %}
+                {# Ya aprobada: solo "Devolver" (despublica el evento) y "Eliminar". #}
+                <button class="btn-accion devolver"
+                        hx-post="/solicitudes/{{ solicitud.id }}/devolver"
+                        hx-target="#contenido"
+                        hx-swap="innerHTML">
+                    Devolver
+                </button>
+                <button class="btn-accion peligro"
+                        hx-post="/solicitudes/{{ solicitud.id }}/eliminar"
+                        hx-target="#contenido"
+                        hx-swap="innerHTML"
+                        hx-confirm="¿Eliminar esta solicitud?">
+                    Eliminar
+                </button>
+            {% else %}
+                <button class="btn-accion aceptar"
+                        hx-post="/solicitudes/{{ solicitud.id }}/aprobar"
+                        hx-target="#contenido"
+                        hx-swap="innerHTML">
+                    Aprobar
+                </button>
+                <button class="btn-accion editar"
+                        hx-get="/solicitudes/{{ solicitud.id }}/editar"
+                        hx-target="#modal"
+                        hx-swap="innerHTML">
+                    Editar
+                </button>
+                <button class="btn-accion peligro"
+                        hx-post="/solicitudes/{{ solicitud.id }}/eliminar"
+                        hx-target="#contenido"
+                        hx-swap="innerHTML"
+                        hx-confirm="¿Eliminar esta solicitud?">
+                    Eliminar
+                </button>
+            {% endif %}
+        </div>
+    </div>
+</div>

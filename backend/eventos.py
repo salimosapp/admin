@@ -54,7 +54,7 @@ def obtener_eventos(aprobados=None, texto=None) -> list[dict]:
     conexion = conectar()
     cursor = conexion.cursor()
 
-    condiciones = ["fecha_hora >= NOW()"]
+    condiciones = ["fecha_hora >= NOW()", "es_solicitud = false"]
     parametros = []
 
     if aprobados is not None:
@@ -183,3 +183,36 @@ def eliminar_muchos(evento_ids: list[int]) -> None:
     conexion.commit()
     cursor.close()
     conexion.close()
+
+
+def limpiar_eventos_pasados() -> int:
+    """
+    Borra los eventos cuya fecha ya pasó y devuelve cuántos se eliminaron.
+
+    Se llama al arrancar la app, antes de cada scraping y por un hilo de fondo
+    periódico, para no acumular eventos viejos en la base (el panel ya los
+    ocultaba de las vistas; esto los elimina de verdad).
+
+    Además reconcilia las solicitudes aprobadas cuyo evento ya no existe:
+    vuelven a 'pendiente' para no quedar colgadas como publicadas.
+    """
+    conexion = conectar()
+    try:
+        cursor = conexion.cursor()
+        cursor.execute("DELETE FROM eventos WHERE fecha_hora < NOW()")
+        borrados = cursor.rowcount
+        cursor.execute(
+            "UPDATE solicitudes_eventos SET estado = 'pendiente' "
+            "WHERE estado = 'aprobado' AND NOT EXISTS ("
+            "    SELECT 1 FROM eventos WHERE eventos.id = solicitudes_eventos.evento_id"
+            ")"
+        )
+        conexion.commit()
+        cursor.close()
+    except Exception:
+        conexion.rollback()
+        raise
+    finally:
+        conexion.close()
+
+    return borrados

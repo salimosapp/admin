@@ -1,0 +1,36 @@
+<h1>Solicitudes del público</h1>
+<p class="bienvenida">Eventos que envió la gente desde la web. Aprobar crea el evento ya publicado; devolver lo despublica y eliminar descarta la solicitud.</p>
+
+{# Interruptor del botón "Solicitar un evento" de la web pública.
+   El estado se guarda en la tabla configuracion y la web lo lee al cargar. #}
+<div class="barra-batch">
+    <span>Botón "Solicitar un evento" en la web:</span>
+    <span class="badge {{ 'ok' if habilitadas else 'no' }}">
+        {{ "Habilitado" if habilitadas else "Deshabilitado" }}
+    </span>
+    <button class="{{ 'peligro' if habilitadas else '' }}"
+            hx-post="/solicitudes/habilitar"
+            hx-target="#contenido"
+            hx-swap="innerHTML">
+        {{ "Deshabilitar" if habilitadas else "Habilitar" }}
+    </button>
+</div>
+
+{# Mensaje de resultado de aprobar/eliminar. #}
+{% if mensaje %}
+<p class="mensaje">{{ mensaje }}</p>
+{% endif %}
+
+{# Grilla de tarjetas de solicitudes pendientes. Cada tarjeta es un parcial
+   aparte (solicitud_card.html), así la edición reemplaza UNA sin tocar el resto. #}
+<div class="grilla">
+    {% for solicitud in solicitudes %}
+    {% include "partials/solicitud_card.html" %}
+    {% else %}
+    <p>No hay solicitudes pendientes.</p>
+    {% endfor %}
+</div>
+
+<script>
+    marcarActiva('solicitudes');
+</script>
