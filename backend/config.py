@@ -12,13 +12,17 @@ load_dotenv()
 
 # --- IA ---
 AI_API_KEY = os.getenv("AI_API_KEY")
-AI_MODEL = os.getenv("AI_MODEL")
+AI_MODEL = os.getenv("AI_MODEL") or "gemini-3.5-flash-lite"
 
 if not AI_API_KEY:
     raise ValueError(
         "Falta AI_API_KEY en el archivo .env. "
         "Agregala con tu clave de Google Gemini."
     )
+
+# Normalizar nombre de modelo por si quedó con nombre viejo/erróneo
+if AI_MODEL in ("gemini-3.5-flash-lite", "gemini-2.5-flash-lite", "gemini-2.0-flash-lite", "gemini-2.5-flash"):
+    AI_MODEL = "gemini-3.5-flash-lite"
 
 # --- Base de datos ---
 DB_HOST = os.getenv("DB_HOST")

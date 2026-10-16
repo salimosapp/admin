@@ -76,11 +76,12 @@ def extraer_eventos(items: list[dict], fecha_hoy: str) -> list[dict | None]:
     )
 
     try:
+        print(f"  [IA] Consultando {AI_MODEL} con {len(items)} textos...")
         respuesta = _cliente.models.generate_content(
             model=AI_MODEL,
             contents=prompt,
         )
-        texto_respuesta = respuesta.text.strip()
+        texto_respuesta = respuesta.text.strip() if respuesta.text else ""
         # Limpiar fences de markdown si los hay
         texto_respuesta = (
             texto_respuesta
@@ -118,10 +119,10 @@ def extraer_eventos(items: list[dict], fecha_hoy: str) -> list[dict | None]:
         return eventos
 
     except json.JSONDecodeError:
-        print(f"La IA no devolvió un JSON válido: {texto_respuesta[:MAX_LOG_LARGO]}")
+        print(f"La IA no devolvió un JSON válido: {texto_respuesta[:MAX_LOG_LARGO] if 'texto_respuesta' in locals() else ''}")
         return [None] * len(items)
     except Exception as e:
-        print(f"Error consultando la IA: {e}")
+        print(f"Error consultando la IA ({AI_MODEL}): {e}")
         return [None] * len(items)
 
 
@@ -207,7 +208,7 @@ def detectar_selectores(url: str, tipo: str) -> dict:
         print(f"La IA no devolvió un JSON de selectores válido")
         return _selectores_vacios()
     except Exception as e:
-        print(f"Error consultando la IA para detectar selectores: {e}")
+        print(f"Error consultando la IA para detectar selectores ({AI_MODEL}): {e}")
         return _selectores_vacios()
 
     # 3) Normalizar: solo textos no vacíos (o None).
