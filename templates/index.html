@@ -69,15 +69,27 @@
         nav {
             background: var(--superficie);
             border-bottom: 1px solid var(--borde);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        /* Contenido del nav. Mismo ancho máximo que <main>, así la marca
+           arranca donde arranca el contenido y el botón "Salir" termina
+           donde termina: en columna, no pegado al borde de la pantalla. */
+        .nav-inner {
+            max-width: 1240px;
+            margin: 0 auto;
             padding: 0 1.5rem;
             display: flex;
             align-items: center;
             gap: 1.5rem;
             height: 64px;
-            position: sticky;
-            top: 0;
-            z-index: 10;
+            /* En pantallas angostas los links no entran: que scrolleen de a
+               lado en vez de romper el layout de toda la página. */
+            overflow-x: auto;
+            scrollbar-width: none;
         }
+        .nav-inner::-webkit-scrollbar { display: none; }
         .marca {
             font-weight: 700;
             color: var(--primario);
@@ -85,7 +97,7 @@
             font-size: 1.35rem;
         }
         nav a.link {
-            color: var(--texto-suave);
+            color: var(--texto-soave);
             text-decoration: none;
             font-weight: 500;
         }
@@ -102,16 +114,35 @@
         }
 
         /* Botón "Salir": forma de link, pero en la punta derecha del nav.
-           El <form> no puede heredar el flex del nav, así que se estira. */
-        nav .salir { margin-left: auto; }
+           El <form> no puede heredar el flex del nav, así que se estira.
+           Y hay que sacarle la caja que le pone la regla global de
+           formularios, que lo convertía en un bloque con padding. */
+        nav .salir {
+            margin-left: auto;
+            display: block;
+            background: none;
+            border: none;
+            padding: 0;
+            border-radius: 0;
+        }
         nav .btn-salir {
             background: none;
             border: 1px solid var(--borde);
-            color: var(--texto-suave);
+            color: var(--texto-soave);
             font-size: 0.85rem;
             padding: 0.35rem 0.8rem;
+            white-space: nowrap;
         }
         nav .btn-salir:hover { background: var(--superficie); color: var(--peligro); border-color: var(--peligro); }
+
+        /* En el celular el menú va apretado */
+        @media (max-width: 640px) {
+            .nav-inner { gap: 0.9rem; padding: 0 1rem; }
+            .marca { font-size: 1.1rem; }
+            nav a.link { font-size: 0.9rem; }
+            nav .btn-salir { font-size: 0.8rem; padding: 0.3rem 0.6rem; }
+        }
+
 
         /* Contenido principal. Es donde htmx inyecta los parciales. */
         main {
@@ -389,19 +420,21 @@
        La clase "activo" se setea acá en la carga completa y la ajusta
        marcarActiva() cuando se navega por htmx. #}
     <nav>
-        <a class="marca" href="/" hx-get="/inicio" hx-target="#contenido" hx-push-url="true">¿Salimos?</a>
-        <a class="link{{ ' activo' if seccion == 'inicio' }}" href="/inicio" hx-get="/inicio" hx-target="#contenido" hx-push-url="true">Inicio</a>
-        <a class="link{{ ' activo' if seccion == 'eventos' }}" href="/eventos" hx-get="/eventos" hx-target="#contenido" hx-push-url="true">Eventos</a>
-        <a class="link{{ ' activo' if seccion == 'solicitudes' }}" href="/solicitudes" hx-get="/solicitudes" hx-target="#contenido" hx-push-url="true">Solicitudes</a>
-        <a class="link{{ ' activo' if seccion == 'fuentes' }}" href="/fuentes" hx-get="/fuentes" hx-target="#contenido" hx-push-url="true">Fuentes</a>
-        <a class="link{{ ' activo' if seccion == 'scraping' }}" href="/scraping" hx-get="/scraping" hx-target="#contenido" hx-push-url="true">Scraping</a>
+        <div class="nav-inner">
+            <a class="marca" href="/" hx-get="/inicio" hx-target="#contenido" hx-push-url="true">¿Salimos?</a>
+            <a class="link{{ ' activo' if seccion == 'inicio' }}" href="/inicio" hx-get="/inicio" hx-target="#contenido" hx-push-url="true">Inicio</a>
+            <a class="link{{ ' activo' if seccion == 'eventos' }}" href="/eventos" hx-get="/eventos" hx-target="#contenido" hx-push-url="true">Eventos</a>
+            <a class="link{{ ' activo' if seccion == 'solicitudes' }}" href="/solicitudes" hx-get="/solicitudes" hx-target="#contenido" hx-push-url="true">Solicitudes</a>
+            <a class="link{{ ' activo' if seccion == 'fuentes' }}" href="/fuentes" hx-get="/fuentes" hx-target="#contenido" hx-push-url="true">Fuentes</a>
+            <a class="link{{ ' activo' if seccion == 'scraping' }}" href="/scraping" hx-get="/scraping" hx-target="#contenido" hx-push-url="true">Scraping</a>
 
-        {# Botón "Salir", pegado a la derecha. Va en un <form> porque el
-           logout es un POST: así no se puede desloguear con un simple clic
-           en un enlace prefetchado por el navegador. #}
-        <form method="post" action="/logout" class="salir">
-            <button type="submit" class="btn-salir">Salir</button>
-        </form>
+            {# Botón "Salir", pegado a la derecha. Va en un <form> porque el
+               logout es un POST: así no se puede desloguear con un simple clic
+               en un enlace prefetchado por el navegador. #}
+            <form method="post" action="/logout" class="salir">
+                <button type="submit" class="btn-salir">Salir</button>
+            </form>
+        </div>
     </nav>
 
     {# Acá cada parcial reemplaza el contenido.
