@@ -64,6 +64,18 @@ CREATE TABLE IF NOT EXISTS eventos (
 -- las agregamos (IF NOT EXISTS para poder correr esto varias veces).
 ALTER TABLE eventos ADD COLUMN IF NOT EXISTS imagen_datos BYTEA;
 ALTER TABLE eventos ADD COLUMN IF NOT EXISTS imagen_mime TEXT;
+
+-- Migración: las primeras versiones de la tabla usaban VARCHAR cortas
+-- (titulo 200, lugar 150, categoria y precio 50). La IA devuelve el precio
+-- "tal cual aparece" en el cartelero y un precio normal con dos modalities
+-- ("Anticipadas: 2 x $10.000 - En puerta: $15.000") pasa los 50 caracteres:
+-- el INSERT rebotaba y se perdía el evento entero, imagen incluida.
+-- Ampliar a TEXT deja de cortar los eventos. Es idempotente: se puede correr
+-- en cada arranque sin problema.
+ALTER TABLE eventos ALTER COLUMN titulo TYPE TEXT;
+ALTER TABLE eventos ALTER COLUMN lugar TYPE TEXT;
+ALTER TABLE eventos ALTER COLUMN categoria TYPE TEXT;
+ALTER TABLE eventos ALTER COLUMN precio TYPE TEXT;
 -- Los eventos que vienen de aprobar una solicitud pública se marcan acá.
 -- El panel no los muestra en Inicio/Eventos (se gestionan en Solicitudes),
 -- pero la web pública sí los lee igual que a todos.
@@ -113,6 +125,15 @@ CREATE TABLE IF NOT EXISTS solicitudes_eventos (
 
 -- Migración: si la tabla ya existía sin la columna evento_id, la agregamos.
 ALTER TABLE solicitudes_eventos ADD COLUMN IF NOT EXISTS evento_id INTEGER;
+
+-- Migración: mismas columnas cortas que tenía `eventos` (el público puede
+-- mandar un título o un precio más largo de lo que entraba). Se amplían a TEXT
+-- para que una solicitud no se pierda por un texto largo.
+ALTER TABLE solicitudes_eventos ALTER COLUMN titulo TYPE TEXT;
+ALTER TABLE solicitudes_eventos ALTER COLUMN lugar TYPE TEXT;
+ALTER TABLE solicitudes_eventos ALTER COLUMN categoria TYPE TEXT;
+ALTER TABLE solicitudes_eventos ALTER COLUMN precio TYPE TEXT;
+ALTER TABLE solicitudes_eventos ALTER COLUMN imagen_mime TYPE TEXT;
 """
 
 
