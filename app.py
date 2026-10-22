@@ -50,6 +50,7 @@ from backend.config import (
     COOKIE_SECURE,
 )
 from backend.extractor import ejecutar
+from backend.jobs import corrida_scraping
 from backend.scrapings import obtener_historial
 from backend.ia import detectar_selectores
 from backend.formato import precio_display
@@ -564,6 +565,14 @@ def fuentes_probar(fuente_id: int):
                   f"activala para poder probarla."
         )
 
+    # No se prueba una fuente mientras hay un scraping general corriendo:
+    # las dos cosas pegarle a la IA y a la base a la vez no sirve de nada.
+    if corrida_scraping.corriendo:
+        return _render_fuentes(
+            error="Hay un scraping en curso. Esperá a que termine "
+                  "antes de probar una fuente."
+        )
+
     selector_obligatorio = (
         "selector_item" if fuente["tipo"] == "cartelera" else "selector_link"
     )
@@ -715,6 +724,25 @@ def solicitudes_actualizar(solicitud_id: int):
 # --- Scraping ---
 
 
+def _contexto_scraping(mensaje: str | None = None) -> dict:
+    """
+    Arma lo que la vista de Scraping necesita saber.
+
+    - "corriendo": si hay una corrida en curso (la vista se pone a pollar).
+    - "estado": la última cosa que dijo el scraping, para mostrarla.
+    - "resultado": los números de la última corrida terminada.
+    - "error": si la corrida murió con una excepción.
+    """
+    estado = corrida_scraping.snapshot()
+    return {
+        "corriendo": estado["estado"] == "running",
+        "estado_scraping": estado,
+        "mensaje": mensaje,
+        "resultado": estado["resultado"],
+        "error": estado["error"],
+    }
+
+
 @app.route("/scraping")
 def scraping():
     """Vista con el botón que inicia el scraping y el historial de corridas."""
@@ -723,19 +751,68 @@ def scraping():
         "partials/scraping.html",
         historial=historial,
         seccion="scraping",
+        **_contexto_scraping(),
     )
 
 
 @app.route("/scraping/iniciar", methods=["POST"])
 def scraping_iniciar():
-    """Recorre las fuentes, extrae eventos con IA y los guarda en la base."""
-    resultado = ejecutar()
+    """
+    Arranca el scraping y vuelve enseguida.
+
+    El scraping NO corre acá: corre en un hilo de fondo (backend/jobs.py).
+    Si corriera en el request, tardaría minutos y gunicorn mataría al worker
+    por timeout, y el panel se quedaría en blanco.
+    """
+    if not corrida_scraping.iniciar():
+        return _render_pagina(
+            "partials/scraping.html",
+            historial=obtener_historial(),
+            seccion="scraping",
+            **_contexto_scraping(
+                "Ya hay un scraping en curso. Esperá a que termine."
+            ),
+        )
+
+    return _render_pagina(
+        "partials/scraping.html",
+        historial=obtener_historial(),
+        seccion="scraping",
+        **_contexto_scraping(),
+    )
+
+
+@app.route("/scraping/estado")
+def scraping_estado():
+    """
+    Estado de la corrida en curso. La vista la consulta cada 2 segundos
+    mientras el scraping corre, y deja de consultarlo cuando termina.
+    """
     historial = obtener_historial()
     return _render_pagina(
         "partials/scraping.html",
         historial=historial,
-        resultado=resultado,
         seccion="scraping",
+        **_contexto_scraping(),
+    )
+
+
+@app.route("/scraping/cancelar", methods=["POST"])
+def scraping_cancelar():
+    """Pide que se corte el scraping que está corriendo."""
+    if not corrida_scraping.cancelar():
+        return _render_pagina(
+            "partials/scraping.html",
+            historial=obtener_historial(),
+            seccion="scraping",
+            **_contexto_scraping("No hay ningún scraping en curso."),
+        )
+
+    return _render_pagina(
+        "partials/scraping.html",
+        historial=obtener_historial(),
+        seccion="scraping",
+        **_contexto_scraping("Cancelando el scraping..."),
     )
 
 

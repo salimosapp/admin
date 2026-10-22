@@ -311,9 +311,10 @@
         .accion-grupo { text-align: center; margin-top: 2rem; }
         .boton-grande { font-size: 1.05rem; padding: 0.9rem 2rem; }
 
-        /* Spinner que se muestra mientras corre el scraping */
-        .progreso { display: none; align-items: center; justify-content: center; gap: 0.6rem; margin-top: 1.2rem; color: var(--texto-suave); font-size: 0.95rem; }
-        .progreso.htmx-request { display: flex; }
+        /* Spinner del scraping: se muestra mientras la corrida está en curso.
+           El bloque solo se renderiza cuando hay algo corriendo, así que
+           siempre está visible. */
+        .progreso { display: flex; align-items: center; justify-content: center; gap: 0.6rem; margin-top: 1.2rem; color: var(--texto-suave); font-size: 0.95rem; }
         .spinner {
             width: 22px; height: 22px;
             border: 3px solid #d1d5db;

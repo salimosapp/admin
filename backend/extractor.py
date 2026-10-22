@@ -5,6 +5,7 @@ Orquesta el scraping de todas las fuentes, envía los textos a la IA
 para identificar eventos, y los guarda en la base de datos.
 """
 
+import gc
 import time
 from datetime import date, datetime
 
@@ -34,23 +35,43 @@ def extraer_url_base(url: str) -> str:
     return "/".join(url.split("/")[:3])
 
 
+def lotes(items, tamaño: int):
+    """
+    Agrupa un iterable en lotes de 'tamaño' elementos.
+
+    Se usa con generadores para no tener todos los artículos de una fuente en
+    memoria a la vez: el scraping corre en un servidor chico (Render free son
+    512 MB) y cada página descargada pesa.
+    """
+    lote = []
+    for item in items:
+        lote.append(item)
+        if len(lote) >= tamaño:
+            yield lote
+            lote = []
+    if lote:
+        yield lote
+
+
 # --- Procesamiento de fuentes ---
 
 
-def procesar_fuente_listado(fuente: dict) -> list[dict]:
+def procesar_fuente_listado(fuente: dict):
     """
     Procesa una fuente tipo 'listado_noticias'.
 
     1. Descarga la página principal con los links a artículos.
     2. Sigue cada link y extrae el texto completo del artículo.
-    3. Devuelve una lista de items con texto, link e imagen.
+    3. Va yielding items con texto, link e imagen.
+
+    Es un generador: el artículo se descarga justo cuando se lo necesita, así
+    que nunca están todos los textos de la fuente en memoria a la vez.
     """
     base = extraer_url_base(fuente["url"])
     respuesta = requests.get(fuente["url"], headers=HEADERS, timeout=15)
     respuesta.raise_for_status()
     soup = BeautifulSoup(respuesta.text, "html.parser")
 
-    items = []
     for a in soup.select(fuente["selector_link"]):
         href = a.get("href")
         if not href:
@@ -70,14 +91,12 @@ def procesar_fuente_listado(fuente: dict) -> list[dict]:
         if texto is None:
             continue
 
-        items.append({
+        yield {
             "texto": texto,
             "link": href,
             "imagen_url": imagen_url,
             "imagen_base": base,
-        })
-
-    return items
+        }
 
 
 def _extraer_imagen_del_bloque(elemento, base: str) -> str | None:
@@ -112,19 +131,20 @@ def _descargar_articulo(url: str) -> str | None:
         return None
 
 
-def procesar_fuente_cartelera(fuente: dict) -> list[dict]:
+def procesar_fuente_cartelera(fuente: dict):
     """
     Procesa una fuente tipo 'cartelera'.
 
     Cada card de la página ya tiene el texto completo,
     no hace falta seguir links adicionales.
+
+    Es un generador, igual que el listado de noticias.
     """
     base = extraer_url_base(fuente["url"])
     respuesta = requests.get(fuente["url"], headers=HEADERS, timeout=15)
     respuesta.raise_for_status()
     soup = BeautifulSoup(respuesta.text, "html.parser")
 
-    items = []
     for card in soup.select(fuente["selector_item"]):
         texto = card.get_text(" ", strip=True)
 
@@ -144,14 +164,12 @@ def procesar_fuente_cartelera(fuente: dict) -> list[dict]:
             else None
         )
 
-        items.append({
+        yield {
             "texto": texto,
             "link": fuente["url"],
             "imagen_url": imagen_url,
             "imagen_base": base,
-        })
-
-    return items
+        }
 
 
 # --- Guardado en base de datos ---
@@ -249,7 +267,44 @@ def guardar_evento(datos: dict, item: dict) -> str | None:
 # --- Orquestación ---
 
 
-def ejecutar(fuente_id: int | None = None) -> dict:
+def _procesar_lote(lote: list[dict], fecha_hoy: str) -> tuple[int, int, int]:
+    """
+    Manda un lote de textos a la IA y guarda los eventos que salen.
+
+    Returns:
+        (nuevos, actualizados, errores)
+    """
+    print(f"  Procesando lote ({len(lote)} items)...")
+    resultados = extraer_eventos(lote, fecha_hoy)
+
+    nuevos = 0
+    actualizados = 0
+    errores = 0
+
+    for item, resultado in zip(lote, resultados):
+        if resultado:
+            estado = guardar_evento(resultado, item)
+            if estado == "nuevo":
+                nuevos += 1
+            elif estado == "actualizado":
+                actualizados += 1
+            else:
+                errores += 1
+            print(
+                f"    > Evento: {resultado['titulo']} "
+                f"({resultado['fecha']}) [{estado}]"
+            )
+        else:
+            print("    · No es evento (o no se pudo interpretar)")
+
+    return nuevos, actualizados, errores
+
+
+def ejecutar(
+    fuente_id: int | None = None,
+    progress=None,
+    should_stop=None,
+) -> dict:
     """
     Ejecuta el scraping de todas las fuentes activas (o de una sola).
 
@@ -262,6 +317,10 @@ def ejecutar(fuente_id: int | None = None) -> dict:
 
     Args:
         fuente_id: si se pasa, solo escrapea esa fuente (debe estar activa).
+        progress: callable que recibe un texto con el avance de la corrida.
+            Se usa para mostrarle al panel en qué está.
+        should_stop: callable que devuelve True para cortar la corrida.
+            El panel lo usa para el botón "Cancelar".
 
     Returns:
         dict con "nuevos", "actualizados", "errores", "total", "duracion"
@@ -273,7 +332,17 @@ def ejecutar(fuente_id: int | None = None) -> dict:
     actualizados = 0
     errores = 0
 
+    def avisar(texto: str) -> None:
+        """Manda el avance al panel (si alguien lo está escuchando)."""
+        if progress:
+            progress(texto)
+
+    def cortado() -> bool:
+        """True si hay que abandonar la corrida."""
+        return bool(should_stop and should_stop())
+
     # Antes de scrapear, tiramos los eventos cuya fecha ya pasó.
+    avisar("Tirando los eventos que ya pasaron...")
     limpiar_eventos_pasados()
 
     fuentes = obtener_fuentes()
@@ -281,6 +350,10 @@ def ejecutar(fuente_id: int | None = None) -> dict:
         fuentes = [f for f in fuentes if f["id"] == fuente_id]
 
     for fuente in fuentes:
+        if cortado():
+            avisar("Scraping cancelado.")
+            break
+
         # Si la fuente no tiene el selector obligatorio para su tipo
         # (porque la IA no pudo detectarlo y quedó mal configurada),
         # la salteamos con un aviso en vez de romper el lote.
@@ -292,44 +365,50 @@ def ejecutar(fuente_id: int | None = None) -> dict:
                 f"  La fuente {fuente['url']} no tiene {selector_obligatorio}; "
                 f"se saltea. Revisala en /fuentes."
             )
+            avisar(f"«{fuente['nombre']}» se saltea (falta el selector).")
             continue
 
         print(f"\nRevisando fuente ({fuente['tipo']}): {fuente['url']}")
+        avisar(f"Revisando «{fuente['nombre']}»...")
+
+        total_items = 0
+        num_lote = 0
+
         try:
-            items = _procesar_fuente(fuente)
+            for num_lote, lote in enumerate(
+                lotes(_procesar_fuente(fuente), SCRAPING_LOTE_TAMANO),
+                start=1,
+            ):
+                if cortado():
+                    avisar("Scraping cancelado.")
+                    break
+
+                total_items += len(lote)
+                avisar(
+                    f"«{fuente['nombre']}»: lote {num_lote} "
+                    f"({len(lote)} textos) con la IA..."
+                )
+
+                n, a, e = _procesar_lote(lote, fecha_hoy)
+                nuevos += n
+                actualizados += a
+                errores += e
+
+                # Soltar lo que ya no se usa: en un servidor chico (512 MB)
+                # cada texto/article descargado suma.
+                del lote
+                gc.collect()
+
+                # Pausa entre lotes para no saturar
+                if num_lote > 1:
+                    time.sleep(SCRAPING_ENTRE_LOTES_PAUSA)
         except Exception as e:
             print(f"Error accediendo a {fuente['url']}: {e}")
             errores += 1
+            avisar(f"Error en «{fuente['nombre']}»: {e}")
             continue
 
-        print(f"  {len(items)} items encontrados")
-
-        for i in range(0, len(items), SCRAPING_LOTE_TAMANO):
-            lote = items[i : i + SCRAPING_LOTE_TAMANO]
-            num_lote = i // SCRAPING_LOTE_TAMANO + 1
-            print(f"  Procesando lote {num_lote} ({len(lote)} items)...")
-
-            resultados = extraer_eventos(lote, fecha_hoy)
-
-            for item, resultado in zip(lote, resultados):
-                if resultado:
-                    estado = guardar_evento(resultado, item)
-                    if estado == "nuevo":
-                        nuevos += 1
-                    elif estado == "actualizado":
-                        actualizados += 1
-                    else:
-                        errores += 1
-                    print(
-                        f"    > Evento: {resultado['titulo']} "
-                        f"({resultado['fecha']}) [{estado}]"
-                    )
-                else:
-                    print("    · No es evento (o no se pudo interpretar)")
-
-            # Pausa entre lotes para no saturar
-            if i + SCRAPING_LOTE_TAMANO < len(items):
-                time.sleep(SCRAPING_ENTRE_LOTES_PAUSA)
+        print(f"  {total_items} items encontrados")
 
     duracion = time.time() - inicio
 
@@ -359,7 +438,7 @@ def ejecutar(fuente_id: int | None = None) -> dict:
     }
 
 
-def _procesar_fuente(fuente: dict) -> list[dict]:
+def _procesar_fuente(fuente: dict):
     """Despacha al procesador correcto según el tipo de fuente."""
     tipo = fuente["tipo"]
 
