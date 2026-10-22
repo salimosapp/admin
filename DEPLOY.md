@@ -113,11 +113,20 @@ Si los números coinciden con lo que tenías local, salió bien.
    | Region               | La más cercana a la región de Neon             |
    | Runtime              | Python                                         |
    | Build command        | `pip install -r requirements.txt`             |
-   | Start command        | `gunicorn app:app --workers 1 --threads 4 --timeout 300` |
+   | Start command        | `gunicorn app:app --workers 1 --threads 4 --timeout 900` |
    | Instance type        | Free                                           |
 
    El start command ya está en el `Procfile`, así que Render debería tomarlo
    solo. Dejalo explícito si te da error.
+
+   No hace falta migrar la base a mano: al arrancar, `backend/db.py` ensancha
+   el esquema y convierte a TEXT las columnas que quedaban cortas
+   (`titulo`, `lugar`, `categoria`, `precio` en `eventos` y
+   `solicitudes_eventos`). Es idempotente, así que podés correrlo las veces
+   que quieras. Antes de este cambio esas columnas eran `varchar(50)` y
+   cualquier texto un poco más largo reventaba la transacción y se perdía el
+   evento entero, imagen incluida. La primera vez que arranques en Render,
+   mirá el log: tiene que decir que widened las columnas.
 
 4. En **Environment**, agregá una por una:
 
@@ -225,13 +234,21 @@ Render, no el de Neon).
   completo. Para un link público compartido por WhatsApp eso es un problema.
   Si hace falta más, el siguiente paso es un login por usuario con password
   hasheada en la base, más un límite de intentos.
-- **Scraping**: es un request largo (lotes de 10 con pausas, más descarga de
-  imágenes). Con los recursos del free tier puede cortarse a mitad de camino. El
-  `--timeout 300` del Procfile le da 5 minutos de margen. Si igual se corta,
+- **Scraping**: ya no es un request largo. El botón arranca el scraping en un
+  hilo de fondo (`backend/jobs.py`) y la vista lo consulta cada 2 segundos
+  hasta que termina. Antes el scraping corría dentro del request: tardaba
+  minutos, gunicorn mataba al worker por timeout
+  (`WORKER TIMEOUT` / `was sent SIGKILL! Perhaps out of memory?`) y el panel
+  se quedaba en blanco, como si el botón no hiciera nada. Si igual se corta,
   subí el plan o corré el scraping con un worker dedicado.
+- **Cancelar el scraping**: el botón "Cancelar" corta la corrida en el
+  próximo lote (no a mitad de un pedido a la IA). Lo que ya se guardó se
+  queda; lo que no llegó a procesarse, no.
 - **1 worker a propósito**: el free tier da 512 MB y 0.1 CPU. Con más workers
-  vas al swap, que es más lento. Además evita que dos procesos compitan
-  creando el esquema al arrancar.
+  vas al swap, que es más lento. Además evita que dos procesos compiten
+  creando el esquema al arrancar. Y hace falta uno solo porque el estado de la
+  corrida vive en memoria del proceso: con dos workers, el botón podría
+  mirar la corrida en el proceso equivocado.
 - **El disco es efímero**: cada deploy borra el sistema de archivos. No pasa
   nada con tu caso porque las imágenes ya viven en la base (`imagen_datos
   BYTEA`), no en disco.
