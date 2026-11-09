@@ -9,7 +9,7 @@
         /* Mismas variables de color que index.html, para que el login se vea
            como parte del mismo panel. */
         :root {
-            --fondo: <img src="/admin/berisoo.jpg" alt="Fondo de la página" style="display:none;">#f9fafb;
+            --fondo: #f9fafb;
             --superficie: #ffffff;
             --texto: #1f2937;
             --texto-suave: #6b7280;
@@ -33,6 +33,29 @@
             align-items: center;
             justify-content: center;
             padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Imagen de fondo difuminada. Va en una capa aparte para poder
+           aplicar blur sin afectar la tarjeta del login. */
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            background: url("/static/img/berisoo.jpg") center/cover no-repeat;
+            filter: blur(8px);
+            transform: scale(1.08);
+            z-index: -2;
+        }
+
+        /* Velo blanco semiopaco para que el fondo quede suave y legible. */
+        body::after {
+            content: "";
+            position: fixed;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.72);
+            z-index: -1;
         }
 
         .caja {
